@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '@gadnuc/auth';
-import { getPool, purgeAllTenantData, provisionTenantSchema } from '@gadnuc/db';
+import { getPool, purgeAllTenantData, provisionTenantSchema, withTenantSchema } from '@gadnuc/db';
 import { invalidateTenantCache } from '@gadnuc/tenant';
 
 export const tenantsRouter = Router();
@@ -88,6 +88,19 @@ tenantsRouter.post('/', async (req, res) => {
 
     // Provision schema (with rollback-on-failure built-in)
     await provisionTenantSchema(pool, slug, tenant!.id);
+
+    // Auto-provision #general messaging room (best-effort — don't fail creation)
+    try {
+      await withTenantSchema(slug, async (db: any) => {
+        await db.query(
+          `INSERT INTO messaging_rooms (name, topic, room_type, is_public)
+           VALUES ('general', 'General team discussion', 'channel', false)
+           ON CONFLICT DO NOTHING`,
+        );
+      });
+    } catch {
+      // Non-fatal — messaging tables may not exist yet if migration hasn't run
+    }
 
     console.log(`[tenants] Created tenant: ${slug} (${tenant!.id})`);
     res.status(201).json({ data: tenant });

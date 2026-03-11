@@ -49,6 +49,15 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
           </li>
           <li>
             <Link
+              href={`${base}/support`}
+              className="font-medium text-sm hover:opacity-75 transition-opacity"
+              style={{ color: 'var(--color-primary-fg)', textDecoration: 'none' }}
+            >
+              Support
+            </Link>
+          </li>
+          <li>
+            <Link
               href={`${base}/cart`}
               className="relative font-medium text-sm hover:opacity-75 transition-opacity flex items-center gap-1"
               style={{ color: 'var(--color-primary-fg)', textDecoration: 'none' }}

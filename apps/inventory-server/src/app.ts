@@ -14,6 +14,8 @@ import { authRouter }           from './routes/auth.js';
 import { usersRouter }          from './routes/users.js';
 import { storefrontRouter, handleStripeWebhook } from './routes/storefront.js';
 import { uploadsRouter }        from './routes/uploads.js';
+import { messagingRouter }      from './routes/messaging.js';
+import { featureGuard }         from '@gadnuc/feature-flags';
 
 export function createApp() {
   const app = express();
@@ -89,6 +91,7 @@ export function createApp() {
   app.use('/api/filaments',   filamentsRouter);
   app.use('/api/users',       usersRouter);
   app.use('/api/uploads',     uploadsRouter);
+  app.use('/api/messaging',   featureGuard('matrix'), messagingRouter);
 
   // ── 404 & error handler ───────────────────────────────────────────────
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
