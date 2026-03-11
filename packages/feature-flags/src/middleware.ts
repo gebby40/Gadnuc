@@ -9,14 +9,15 @@ import { isFeatureEnabled } from './flags.js';
  */
 export function featureGuard(flagName: string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const tenantId = req.tenant?.id ?? req.user?.tenantId;
+    const r = req as any;
+    const tenantId = r.tenant?.id ?? r.user?.tenantId;
 
     if (!tenantId) {
       res.status(401).json({ error: 'Tenant context required for feature check' });
       return;
     }
 
-    const userId = req.user?.userId;
+    const userId = r.user?.userId;
     const enabled = await isFeatureEnabled(flagName, tenantId, userId);
 
     if (!enabled) {
