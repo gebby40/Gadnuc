@@ -1,0 +1,20 @@
+{
+  "name": "@gadnuc/db",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "migrate": "node dist/migrate.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.11.5",
+    "pg-pool": "^3.6.2"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.5",
+    "typescript": "^5.4.5"
+  }
+}

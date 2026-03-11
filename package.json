@@ -1,0 +1,26 @@
+{
+  "name": "gadnuc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gadnuc — Multi-tenant SaaS platform (monorepo)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "concurrently \"npm run dev -w apps/inventory-server\" \"npm run dev -w apps/server-manager\" \"npm run dev -w apps/storefront\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "migrate": "npm run migrate -w packages/db"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

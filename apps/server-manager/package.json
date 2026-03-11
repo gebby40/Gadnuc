@@ -1,0 +1,31 @@
+{
+  "name": "@gadnuc/server-manager",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gadnuc/auth": "*",
+    "@gadnuc/db": "*",
+    "@gadnuc/feature-flags": "*",
+    "@gadnuc/tenant": "*",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "stripe": "^14.21.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.5"
+  }
+}
