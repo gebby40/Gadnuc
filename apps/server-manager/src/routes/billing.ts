@@ -115,7 +115,7 @@ function stripeStatusToTenantStatus(stripeStatus: string): string {
 
 async function getStripe() {
   const { default: Stripe } = await import('stripe');
-  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-04-10' });
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' });
 }
 
 // express.raw() for webhook body parsing
