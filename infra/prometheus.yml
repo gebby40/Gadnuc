@@ -1,0 +1,36 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    env: production
+
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []  # Configure Alertmanager endpoint here
+
+scrape_configs:
+  # ── Inventory Server ──────────────────────────────────────────────────────
+  - job_name: inventory-server
+    static_configs:
+      - targets: ['inventory-server:3001']
+    metrics_path: /metrics
+
+  # ── Server Manager ────────────────────────────────────────────────────────
+  - job_name: server-manager
+    static_configs:
+      - targets: ['server-manager:3002']
+    metrics_path: /metrics
+
+  # ── Node Exporter (host metrics) ──────────────────────────────────────────
+  - job_name: node-exporter
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # ── Prometheus self-scrape ────────────────────────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

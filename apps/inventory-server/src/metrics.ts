@@ -56,6 +56,39 @@ export const dbPoolWaiting = new Gauge({
   registers: [register],
 });
 
+// ── WebSocket connections gauge ───────────────────────────────────────────────
+
+export const wsConnections = new Gauge({
+  name:      'ws_active_connections',
+  help:      'Active WebSocket connections',
+  registers: [register],
+});
+
+// ── Messaging counters ────────────────────────────────────────────────────────
+
+export const messagingMessagesSent = new Counter({
+  name:       'messaging_messages_sent_total',
+  help:       'Total real-time messages sent',
+  labelNames: ['tenant_slug'],
+  registers:  [register],
+});
+
+export const messagingRoomsCreated = new Counter({
+  name:       'messaging_rooms_created_total',
+  help:       'Total messaging rooms created',
+  labelNames: ['room_type'],
+  registers:  [register],
+});
+
+// ── Stripe checkout counter ───────────────────────────────────────────────────
+
+export const stripeCheckoutSessions = new Counter({
+  name:       'stripe_checkout_sessions_total',
+  help:       'Total Stripe checkout sessions created',
+  labelNames: ['tenant_slug', 'mode'],
+  registers:  [register],
+});
+
 // ── Express middleware ────────────────────────────────────────────────────────
 
 export function metricsMiddleware(): RequestHandler {

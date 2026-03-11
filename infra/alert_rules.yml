@@ -1,0 +1,80 @@
+groups:
+  - name: gadnuc.platform
+    interval: 30s
+    rules:
+      # ── HTTP error rate ─────────────────────────────────────────────────────
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[5m])) by (service)
+          /
+          sum(rate(http_request_duration_seconds_count[5m])) by (service)
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} 5xx error rate is {{ $value | humanizePercentage }} (threshold: 5%)."
+
+      # ── P95 response time ───────────────────────────────────────────────────
+      - alert: SlowP95Response
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow P95 response time on {{ $labels.service }}"
+          description: "P95 latency on {{ $labels.service }} is {{ $value | humanizeDuration }} (threshold: 2s)."
+
+      # ── Service availability ────────────────────────────────────────────────
+      - alert: InventoryServerDown
+        expr: absent(up{job="inventory-server"} == 1)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "inventory-server is DOWN"
+          description: "No healthy inventory-server instance has been reachable for 1 minute."
+
+      - alert: ServerManagerDown
+        expr: absent(up{job="server-manager"} == 1)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "server-manager is DOWN"
+          description: "No healthy server-manager instance has been reachable for 1 minute."
+
+      # ── WebSocket connections ───────────────────────────────────────────────
+      - alert: HighWebSocketConnections
+        expr: ws_active_connections > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WebSocket connection count"
+          description: "Active WebSocket connections are {{ $value }} (threshold: 1000). Consider scaling."
+
+      # ── Memory usage ────────────────────────────────────────────────────────
+      - alert: HighHeapMemory
+        expr: |
+          nodejs_heap_size_used_bytes{service="inventory-server"} > 512 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High heap memory on inventory-server"
+          description: "Heap used is {{ $value | humanize1024 }}B (threshold: 512 MiB)."
+
+      # ── DB pool saturation ──────────────────────────────────────────────────
+      - alert: DBPoolExhausted
+        expr: db_pool_waiting_requests{service="inventory-server"} > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB connection pool saturation"
+          description: "{{ $value }} requests are waiting for a DB connection. Pool may be undersized."

@@ -16,10 +16,13 @@
 import { Router } from 'express';
 import { z }      from 'zod';
 import Stripe     from 'stripe';
-import { withTenantSchema } from '@gadnuc/db';
+import { withTenantSchema, getPool } from '@gadnuc/db';
 import { requireAuth, requireRole } from '@gadnuc/auth';
 import { sendOrderConfirmation }    from '../services/email.js';
+import { stripeCheckoutSessions }   from '../metrics.js';
 import type { Request, Response }  from 'express';
+
+const PLATFORM_FEE_PCT = Number(process.env.PLATFORM_FEE_PCT ?? 5);
 
 export const storefrontRouter = Router();
 
@@ -265,7 +268,28 @@ storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Build Stripe line items
+    // 2. Look up Stripe Connect status for this tenant
+    const pool = getPool();
+    const { rows: [tenantRow] } = await pool.query<{
+      stripe_connect_account_id: string | null;
+      stripe_connect_enabled:    boolean;
+    }>(
+      `SELECT stripe_connect_account_id, stripe_connect_enabled
+       FROM public.tenants WHERE slug = $1`,
+      [tenant.slug],
+    );
+    const connectAccountId =
+      tenantRow?.stripe_connect_enabled && tenantRow?.stripe_connect_account_id
+        ? tenantRow.stripe_connect_account_id
+        : null;
+
+    // Pre-compute total for platform fee (only when Connect is active)
+    const totalCents = items.reduce((sum, item) => {
+      const p = productMap.get(item.productId)!;
+      return sum + p.price_cents * item.quantity;
+    }, 0);
+
+    // 3. Build Stripe line items
     const stripe = getStripe();
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = items.map((item) => {
       const p = productMap.get(item.productId)!;
@@ -282,10 +306,10 @@ storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
       };
     });
 
-    // 3. Create Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: lineItems,
+    // 4. Create Stripe Checkout Session (with Connect if enabled)
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+      mode:        'payment',
+      line_items:  lineItems,
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  cancelUrl,
       ...(customerEmail ? { customer_email: customerEmail } : {}),
@@ -295,7 +319,21 @@ storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
       },
       payment_intent_data: {
         metadata: { tenant_slug: tenant.slug },
+        ...(connectAccountId ? {
+          application_fee_amount: Math.round(totalCents * PLATFORM_FEE_PCT / 100),
+          transfer_data:          { destination: connectAccountId },
+        } : {}),
       },
+    };
+
+    const session = await stripe.checkout.sessions.create(
+      sessionParams,
+      connectAccountId ? { stripeAccount: connectAccountId } : undefined,
+    );
+
+    stripeCheckoutSessions.inc({
+      tenant_slug: tenant.slug,
+      mode:        connectAccountId ? 'connect' : 'direct',
     });
 
     res.json({ url: session.url, sessionId: session.id });

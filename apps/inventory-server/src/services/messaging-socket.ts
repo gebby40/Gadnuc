@@ -26,6 +26,7 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import type { Server as HttpServer } from 'node:http';
 import { verifyAccessToken } from '@gadnuc/auth';
 import { withTenantSchema } from '@gadnuc/db';
+import { wsConnections, messagingMessagesSent } from '../metrics.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface MessageEvent {
@@ -122,6 +123,8 @@ export function createMessagingSocket(httpServer: HttpServer): SocketServer {
   // ── Connection handler ──────────────────────────────────────────────────────
   io.on('connection', (socket: Socket) => {
     const data = (socket as any).data as SocketData;
+
+    wsConnections.inc();
 
     console.log(
       `[messaging] connected: ${data.isAnonymous ? 'anon' : data.userId} @ ${data.tenantSlug}`,
@@ -232,6 +235,7 @@ export function createMessagingSocket(httpServer: HttpServer): SocketServer {
 
           // Broadcast to room (including sender so all their tabs get it)
           io.to(socketRoomKey(slug, input.roomId)).emit('new_message', msgEvent);
+          messagingMessagesSent.inc({ tenant_slug: slug });
           callback({ ok: true, event: msgEvent });
         } catch (err: any) {
           callback({ ok: false, error: err.message ?? 'Send failed' });
@@ -292,6 +296,7 @@ export function createMessagingSocket(httpServer: HttpServer): SocketServer {
 
     // ── disconnect ──────────────────────────────────────────────────────────
     socket.on('disconnect', () => {
+      wsConnections.dec();
       if (!data.isAnonymous) {
         socket.broadcast.emit('presence', {
           userId: data.userId,

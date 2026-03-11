@@ -1,2 +1,2 @@
-export { isFeatureEnabled, getEnabledFlags } from './flags.js';
+export { isFeatureEnabled, getEnabledFlags, invalidateFlagCache } from './flags.js';
 export { featureGuard } from './middleware.js';

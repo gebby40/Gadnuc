@@ -15,6 +15,7 @@ import { usersRouter }          from './routes/users.js';
 import { storefrontRouter, handleStripeWebhook } from './routes/storefront.js';
 import { uploadsRouter }        from './routes/uploads.js';
 import { messagingRouter }      from './routes/messaging.js';
+import { stripeConnectRouter }  from './routes/stripe-connect.js';
 import { featureGuard }         from '@gadnuc/feature-flags';
 
 export function createApp() {
@@ -91,7 +92,8 @@ export function createApp() {
   app.use('/api/filaments',   filamentsRouter);
   app.use('/api/users',       usersRouter);
   app.use('/api/uploads',     uploadsRouter);
-  app.use('/api/messaging',   featureGuard('matrix'), messagingRouter);
+  app.use('/api/messaging',      featureGuard('matrix'), messagingRouter);
+  app.use('/api/stripe-connect', stripeConnectRouter);
 
   // ── 404 & error handler ───────────────────────────────────────────────
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));

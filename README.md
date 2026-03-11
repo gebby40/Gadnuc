@@ -28,7 +28,10 @@ gadnuc/
 - **Security-first** — JWT access tokens (15 min) + rotating refresh tokens, RBAC, Zod input validation, parameterized queries, Helmet headers
 - **Feature flags** — Per-tenant flags with percentage rollout; plan-gated features
 - **Storefront** — SSR Next.js 14 storefront with per-tenant theming, product catalog, Stripe checkout
+- **Stripe Connect** — Tenants connect their own Stripe accounts; platform collects application fee per order
 - **Stripe billing** — Subscription management with webhook handling for lifecycle events
+- **Platform admin UI** — Super-admin dashboard: tenant provisioning, feature flag editor, real-time stats
+- **Observability** — Prometheus metrics (HTTP, WebSocket, messaging, Stripe), Grafana dashboards, alert rules
 - **CI/CD** — GitHub Actions: typecheck → lint → test → security scan → build Docker images → deploy to DigitalOcean App Platform
 - **Infrastructure as code** — Terraform for DO managed PostgreSQL, Redis, Spaces, CDN, and App Platform
 
@@ -75,6 +78,18 @@ Services will be available at:
 
 See `.env.example` for all required variables with descriptions.
 
+## Docker (Local Full Stack)
+
+```bash
+# All services (Postgres, Redis, inventory-server, server-manager, storefront)
+docker compose up -d
+
+# Add monitoring stack (Prometheus on :9090, Grafana on :4000)
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+Grafana default credentials: `admin / gadnuc-admin`
+
 ## Deployment
 
 Infrastructure is managed with Terraform (DigitalOcean). See `infra/terraform/` for the full spec.
@@ -97,8 +112,8 @@ Based on the SaaS Transformation Roadmap:
 - [x] **Phase 1** — Multi-tenancy, JWT auth, RBAC, Zod validation
 - [x] **Phase 2** — Schema-per-tenant DB isolation, migration runner
 - [x] **Phase 3** — Next.js storefront with per-tenant theming + Stripe
-- [ ] **Phase 4** — Matrix/Synapse messaging integration
-- [ ] **Phase 5** — Full feature flag UI, Stripe Connect, Grafana monitoring
+- [x] **Phase 4** — Real-time per-tenant team messaging (Socket.io)
+- [x] **Phase 5** — Stripe Connect OAuth, feature flags UI, Grafana + Prometheus monitoring stack
 
 ## Security Notes
 
