@@ -5,11 +5,12 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { tenantMiddleware } from '@gadnuc/tenant';
 
-import { productsRouter }  from './routes/products.js';
-import { ordersRouter }    from './routes/orders.js';
-import { filamentsRouter } from './routes/filaments.js';
-import { authRouter }      from './routes/auth.js';
-import { usersRouter }     from './routes/users.js';
+import { productsRouter }    from './routes/products.js';
+import { ordersRouter }      from './routes/orders.js';
+import { filamentsRouter }   from './routes/filaments.js';
+import { authRouter }        from './routes/auth.js';
+import { usersRouter }       from './routes/users.js';
+import { storefrontRouter }  from './routes/storefront.js';
 
 export function createApp() {
   const app = express();
@@ -60,11 +61,12 @@ export function createApp() {
   app.use(tenantMiddleware);
 
   // ── API routes ────────────────────────────────────────────────────────
-  app.use('/api/auth',      authRouter);
-  app.use('/api/products',  productsRouter);
-  app.use('/api/orders',    ordersRouter);
-  app.use('/api/filaments', filamentsRouter);
-  app.use('/api/users',     usersRouter);
+  app.use('/api/auth',        authRouter);
+  app.use('/api/storefront',  storefrontRouter);
+  app.use('/api/products',    productsRouter);
+  app.use('/api/orders',      ordersRouter);
+  app.use('/api/filaments',   filamentsRouter);
+  app.use('/api/users',       usersRouter);
 
   // ── 404 & error handler ───────────────────────────────────────────────
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));

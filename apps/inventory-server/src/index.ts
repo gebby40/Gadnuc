@@ -1,4 +1,4 @@
-import { createPool, runMigrations } from '@gadnuc/db';
+import { createPool, runMigrations, createRedisClient } from '@gadnuc/db';
 import { createApp } from './app.js';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -7,6 +7,9 @@ async function main() {
   // Initialise DB pool and run pending migrations
   createPool();
   await runMigrations();
+
+  // Initialise Redis (MFA sessions, caching)
+  createRedisClient();
 
   const app = createApp();
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireRole } from '@gadnuc/auth';
+import { requireAuth, requireRole, hashPassword } from '@gadnuc/auth';
 import { withTenantSchema } from '@gadnuc/db';
 
 export const usersRouter = Router();
@@ -64,9 +64,7 @@ usersRouter.post('/', requireRole('tenant_admin'), async (req, res) => {
 
   const { password, ...rest } = parse.data;
 
-  // TODO: hash password with bcrypt before storing:
-  // const password_hash = await bcrypt.hash(password, 12);
-  const password_hash = `PLACEHOLDER:${password}`; // Replace with bcrypt in production
+  const password_hash = await hashPassword(password);
 
   try {
     await withTenantSchema(req.tenantSlug!, async (db) => {
@@ -99,8 +97,7 @@ usersRouter.patch('/:id', requireRole('tenant_admin'), async (req, res) => {
 
   const updates = { ...parse.data };
   if (updates.password) {
-    // TODO: (updates as Record<string, unknown>).password_hash = await bcrypt.hash(updates.password, 12);
-    (updates as Record<string, unknown>).password_hash = `PLACEHOLDER:${updates.password}`;
+    (updates as Record<string, unknown>).password_hash = await hashPassword(updates.password);
     delete updates.password;
   }
 
