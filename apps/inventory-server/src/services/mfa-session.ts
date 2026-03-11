@@ -13,8 +13,8 @@ const MFA_TTL_SECONDS = 5 * 60; // 5 minutes
 const KEY_PREFIX      = 'mfa:';
 
 export interface MfaSessionData {
-  userId:   number;
-  tenantId: number;
+  userId:   string;
+  tenantId: string;
   tenantSlug: string;
 }
 

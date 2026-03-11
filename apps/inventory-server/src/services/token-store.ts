@@ -24,8 +24,8 @@ export function generateRefreshToken(): string {
 
 export async function storeRefreshToken(opts: {
   token:    string;
-  userId:   number;
-  tenantId: number;
+  userId:   string;
+  tenantId: string;
 }): Promise<void> {
   const pool = getPool();
   const hash = sha256(opts.token);
@@ -38,7 +38,7 @@ export async function storeRefreshToken(opts: {
 }
 
 export type RotateResult =
-  | { ok: true;  userId: number; tenantId: number; newToken: string }
+  | { ok: true;  userId: string; tenantId: string; newToken: string }
   | { ok: false; reason: 'not_found' | 'expired' | 'reuse_detected' };
 
 /**
@@ -53,7 +53,7 @@ export async function rotateRefreshToken(incomingToken: string): Promise<RotateR
     const hash = sha256(incomingToken);
 
     const { rows } = await client.query<{
-      id: number; user_id: number; tenant_id: number;
+      id: number; user_id: string; tenant_id: string;
       revoked: boolean; expires_at: string;
     }>(
       `SELECT id, user_id, tenant_id, revoked, expires_at
@@ -103,7 +103,7 @@ export async function rotateRefreshToken(incomingToken: string): Promise<RotateR
     );
 
     await client.query('COMMIT');
-    return { ok: true, userId: row.user_id, tenantId: row.tenant_id, newToken };
+    return { ok: true, userId: String(row.user_id), tenantId: String(row.tenant_id), newToken };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -120,7 +120,7 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   );
 }
 
-export async function revokeAllUserTokens(userId: number, tenantId: number): Promise<void> {
+export async function revokeAllUserTokens(userId: string, tenantId: string): Promise<void> {
   const pool = getPool();
   await pool.query(
     `UPDATE public.refresh_tokens

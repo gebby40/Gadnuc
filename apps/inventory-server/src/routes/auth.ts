@@ -61,8 +61,8 @@ function clearRefreshCookie(res: Response) {
 
 async function issueTokenPair(
   res:      Response,
-  user:     { id: number; email: string; username: string; role: string },
-  tenantId: number,
+  user:     { id: string; email: string; username: string; role: string },
+  tenantId: string,
   tenantSlug: string,
 ) {
   const accessToken   = await signAccessToken({ userId: user.id, tenantId, tenantSlug, role: user.role });
@@ -95,7 +95,10 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
   try {
     const user = await withTenantSchema(tenant.slug, async (db) => {
-      const { rows } = await db.query(
+      const { rows } = await db.query<{
+        id: string; email: string; username: string; role: string;
+        password_hash: string; totp_secret: string | null;
+      }>(
         `SELECT id, email, username, role, password_hash, totp_secret
          FROM users WHERE email = $1 AND is_active = true LIMIT 1`,
         [email],
@@ -163,7 +166,9 @@ authRouter.post('/mfa/verify', async (req: Request, res: Response) => {
 
   try {
     const user = await withTenantSchema(tenant.slug, async (db) => {
-      const { rows } = await db.query(
+      const { rows } = await db.query<{
+        id: string; email: string; username: string; role: string; totp_secret: string | null;
+      }>(
         'SELECT id, email, username, role, totp_secret FROM users WHERE id = $1 LIMIT 1',
         [session.userId],
       );
@@ -197,7 +202,7 @@ authRouter.post('/mfa/verify', async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
-  const authUser = (req as any).user as { userId: number; tenantId: number; tenantSlug: string };
+  const authUser = (req as any).user as { userId: string; tenantId: string; tenantSlug: string };
   const tenant   = (req as any).tenant as { id: string; slug: string };
 
   try {
@@ -242,7 +247,7 @@ authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) =
 const setupConfirmSchema = z.object({ totp_code: z.string().length(6) });
 
 authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Response) => {
-  const authUser = (req as any).user as { userId: number; tenantId: number; tenantSlug: string };
+  const authUser = (req as any).user as { userId: string; tenantId: string; tenantSlug: string };
   const tenant   = (req as any).tenant as { id: string; slug: string };
 
   const parsed = setupConfirmSchema.safeParse(req.body);
@@ -288,7 +293,7 @@ authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Res
 const mfaDisableSchema = z.object({ totp_code: z.string().length(6) });
 
 authRouter.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => {
-  const authUser = (req as any).user as { userId: number; tenantId: number; tenantSlug: string };
+  const authUser = (req as any).user as { userId: string; tenantId: string; tenantSlug: string };
   const tenant   = (req as any).tenant as { id: string; slug: string };
 
   const parsed = mfaDisableSchema.safeParse(req.body);
@@ -366,7 +371,9 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
   }
 
   const user = await withTenantSchema(tenant.slug, async (db) => {
-    const { rows } = await db.query(
+    const { rows } = await db.query<{
+      id: string; email: string; username: string; role: string;
+    }>(
       'SELECT id, email, username, role FROM users WHERE id = $1 LIMIT 1',
       [result.userId],
     );
@@ -396,7 +403,7 @@ authRouter.post('/logout', async (req: Request, res: Response) => {
   if (token) await revokeRefreshToken(token);
   clearRefreshCookie(res);
 
-  const authUser = (req as any).user as { userId?: number; tenantId?: number } | undefined;
+  const authUser = (req as any).user as { userId?: string; tenantId?: string } | undefined;
   if (authUser?.userId) {
     logAuditEvent({ req, action: 'auth.logout', tenantId: authUser.tenantId ?? null, userId: authUser.userId });
   }

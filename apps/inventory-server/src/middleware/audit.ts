@@ -11,8 +11,8 @@ import type { Request } from 'express';
 export interface AuditEventOpts {
   req:      Request;
   action:   string;           // e.g. 'auth.login', 'auth.mfa_verify'
-  tenantId: number | null;
-  userId:   number | null;
+  tenantId: string | null;
+  userId:   string | null;
   metadata?: Record<string, unknown>;
 }
 
