@@ -1,49 +1,71 @@
-import type { TenantInfo, StorefrontSettings } from '@/lib/tenant-api';
-
 interface Props {
-  tenant:   TenantInfo;
-  settings: StorefrontSettings;
+  storeName:    string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  socialLinks:  Record<string, string>;
 }
 
-export function StorefrontFooter({ tenant, settings }: Props) {
+export function StorefrontFooter({ storeName, contactEmail, contactPhone, socialLinks }: Props) {
+  const hasSocial = Object.keys(socialLinks).length > 0;
+
   return (
-    <footer style={{
-      background: '#111',
-      color: '#ccc',
-      padding: '3rem 2rem',
-      marginTop: '4rem',
-    }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
+    <footer
+      className="mt-16"
+      style={{
+        backgroundColor: 'var(--color-bg-secondary)',
+        borderTop: '1px solid var(--color-border)',
+        color: 'var(--color-text-muted)',
+      }}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+        {/* Brand / contact */}
         <div>
-          <h3 style={{ color: '#fff', margin: '0 0 0.75rem' }}>{tenant.display_name}</h3>
-          {settings.contact_email && (
-            <p style={{ margin: '0.25rem 0' }}>
-              <a href={`mailto:${settings.contact_email}`} style={{ color: '#aaa', textDecoration: 'none' }}>
-                {settings.contact_email}
+          <h3 className="font-bold mb-3" style={{ color: 'var(--color-text)' }}>{storeName}</h3>
+          {contactEmail && (
+            <p className="mb-1 text-sm">
+              <a
+                href={`mailto:${contactEmail}`}
+                style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}
+              >
+                {contactEmail}
               </a>
             </p>
           )}
-          {settings.contact_phone && (
-            <p style={{ margin: '0.25rem 0', color: '#aaa' }}>{settings.contact_phone}</p>
+          {contactPhone && (
+            <p className="text-sm">{contactPhone}</p>
           )}
         </div>
 
+        {/* Shop links */}
         <div>
-          <h4 style={{ color: '#fff', margin: '0 0 0.75rem' }}>Shop</h4>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            <li><a href={`/tenant/${tenant.slug}/products`} style={{ color: '#aaa', textDecoration: 'none' }}>All Products</a></li>
-            <li><a href={`/tenant/${tenant.slug}/cart`}     style={{ color: '#aaa', textDecoration: 'none' }}>Cart</a></li>
-            <li><a href={`/tenant/${tenant.slug}/orders`}   style={{ color: '#aaa', textDecoration: 'none' }}>My Orders</a></li>
+          <h4 className="font-semibold mb-3 text-sm uppercase tracking-wider" style={{ color: 'var(--color-text)' }}>Shop</h4>
+          <ul className="list-none p-0 m-0 space-y-2 text-sm">
+            <li>
+              <a href="products" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+                All Products
+              </a>
+            </li>
+            <li>
+              <a href="cart" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+                Cart
+              </a>
+            </li>
           </ul>
         </div>
 
-        {Object.keys(settings.social_links).length > 0 && (
+        {/* Social links */}
+        {hasSocial && (
           <div>
-            <h4 style={{ color: '#fff', margin: '0 0 0.75rem' }}>Follow Us</h4>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {Object.entries(settings.social_links).map(([platform, url]) => (
+            <h4 className="font-semibold mb-3 text-sm uppercase tracking-wider" style={{ color: 'var(--color-text)' }}>Follow Us</h4>
+            <ul className="list-none p-0 m-0 space-y-2 text-sm">
+              {Object.entries(socialLinks).map(([platform, url]) => (
                 <li key={platform}>
-                  <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#aaa', textDecoration: 'none', textTransform: 'capitalize' }}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--color-text-muted)', textDecoration: 'none', textTransform: 'capitalize' }}
+                  >
                     {platform}
                   </a>
                 </li>
@@ -53,9 +75,14 @@ export function StorefrontFooter({ tenant, settings }: Props) {
         )}
       </div>
 
-      <div style={{ maxWidth: '1200px', margin: '2rem auto 0', paddingTop: '1.5rem', borderTop: '1px solid #333', textAlign: 'center', fontSize: '0.875rem', color: '#666' }}>
-        © {new Date().getFullYear()} {tenant.display_name}. Powered by{' '}
-        <a href="https://gadnuc.io" style={{ color: '#888', textDecoration: 'none' }}>Gadnuc</a>.
+      <div
+        className="border-t text-center text-xs py-4"
+        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+      >
+        © {new Date().getFullYear()} {storeName}. Powered by{' '}
+        <a href="https://gadnuc.io" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+          Gadnuc
+        </a>.
       </div>
     </footer>
   );

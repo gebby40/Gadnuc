@@ -1,48 +1,45 @@
-import { notFound } from 'next/navigation';
+/**
+ * Tenant storefront homepage.
+ * Nav, Footer, and ThemeProvider are injected by the parent layout.tsx.
+ */
 import { getTenantStorefront } from '@/lib/tenant-api';
-import { HeroSection }    from '@/components/HeroSection';
-import { ProductGrid }    from '@/components/ProductGrid';
-import { StorefrontNav }  from '@/components/StorefrontNav';
-import { StorefrontFooter } from '@/components/StorefrontFooter';
+import { HeroSection }  from '@/components/HeroSection';
+import { ProductGrid }  from '@/components/ProductGrid';
+import Link             from 'next/link';
 
 interface PageProps {
   params: { slug: string };
 }
 
-export async function generateMetadata({ params }: PageProps) {
-  const data = await getTenantStorefront(params.slug);
-  if (!data) return {};
-  return {
-    title:       data.settings.seo_title ?? data.tenant.display_name,
-    description: data.settings.seo_description ?? `Welcome to ${data.tenant.display_name}`,
-  };
-}
-
 export default async function TenantHomePage({ params }: PageProps) {
-  const data = await getTenantStorefront(params.slug);
-  if (!data) notFound();
-
-  const { tenant, settings, products } = data;
+  const { settings, products } = await getTenantStorefront(params.slug);
 
   return (
-    <div style={{ '--primary': settings.primary_color, '--accent': settings.accent_color } as React.CSSProperties}>
-      <StorefrontNav tenant={tenant} settings={settings} />
-
+    <>
       <HeroSection
-        title={settings.hero_title}
-        subtitle={settings.hero_subtitle}
-        imageUrl={settings.hero_image_url}
-        primaryColor={settings.primary_color}
+        title={settings.hero_title ?? 'Welcome'}
+        subtitle={settings.hero_subtitle ?? null}
+        imageUrl={settings.hero_image_url ?? null}
+        primaryColor={settings.primary_color ?? '#0070f3'}
+        slug={params.slug}
       />
 
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '1.5rem' }}>
-          Our Products
-        </h2>
-        <ProductGrid products={products} tenantSlug={params.slug} />
-      </main>
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
+            Featured Products
+          </h2>
+          <Link
+            href={`/tenant/${params.slug}/products`}
+            className="text-sm font-medium hover:opacity-75 transition-opacity"
+            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+          >
+            View all →
+          </Link>
+        </div>
 
-      <StorefrontFooter tenant={tenant} settings={settings} />
-    </div>
+        <ProductGrid products={products} tenantSlug={params.slug} />
+      </section>
+    </>
   );
 }

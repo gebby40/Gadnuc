@@ -1,8 +1,10 @@
+import Link  from 'next/link';
+import Image from 'next/image';
 import type { Product } from '@/lib/tenant-api';
 
 interface Props {
-  products:    Product[];
-  tenantSlug:  string;
+  products:   Product[];
+  tenantSlug: string;
 }
 
 function formatPrice(cents: number): string {
@@ -12,71 +14,81 @@ function formatPrice(cents: number): string {
 export function ProductGrid({ products, tenantSlug }: Props) {
   if (!products.length) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem', color: '#888' }}>
-        <p style={{ fontSize: '1.25rem' }}>No products available yet.</p>
+      <div className="text-center py-16" style={{ color: 'var(--color-text-muted)' }}>
+        <p className="text-xl">No products available yet.</p>
       </div>
     );
   }
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-      gap: '1.5rem',
-    }}>
+    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
       {products.map((product) => (
-        <a
+        <Link
           key={product.id}
           href={`/tenant/${tenantSlug}/products/${product.id}`}
           style={{ textDecoration: 'none', color: 'inherit' }}
         >
-          <article style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: '12px',
-            overflow: 'hidden',
-            transition: 'box-shadow 0.2s, transform 0.2s',
-            cursor: 'pointer',
-            background: '#fff',
-          }}>
-            <div style={{
-              height: '200px',
-              background: '#f3f4f6',
-              overflow: 'hidden',
-            }}>
+          <article
+            className="group overflow-hidden transition-all duration-200 cursor-pointer"
+            style={{
+              border:       '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-card)',
+              background:   'var(--color-surface)',
+              boxShadow:    'var(--shadow-card)',
+            }}
+          >
+            {/* Image */}
+            <div className="relative overflow-hidden" style={{ height: '200px', background: 'var(--color-bg-secondary)' }}>
               {product.image_url ? (
-                <img
+                <Image
                   src={product.image_url}
                   alt={product.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  fill
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                  unoptimized
                 />
               ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: '3rem' }}>
+                <div className="w-full h-full flex items-center justify-center text-5xl" style={{ color: 'var(--color-border)' }}>
                   📦
                 </div>
               )}
+              {product.stock_qty === 0 && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-sm font-bold"
+                  style={{ background: 'rgba(0,0,0,0.5)', color: '#fff' }}
+                >
+                  Out of Stock
+                </div>
+              )}
             </div>
-            <div style={{ padding: '1rem' }}>
-              <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0 0 0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {product.category ?? 'General'}
-              </p>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
+
+            {/* Info */}
+            <div className="p-4">
+              {product.category && (
+                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                  {product.category}
+                </p>
+              )}
+              <h3 className="font-semibold mb-2 line-clamp-2" style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-text)' }}>
                 {product.name}
               </h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '1.125rem', fontWeight: 700 }}>
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold" style={{ color: 'var(--color-primary)' }}>
                   {formatPrice(product.price_cents)}
                 </span>
-                <span style={{
-                  fontSize: '0.75rem',
-                  color: product.stock_qty > 0 ? '#16a34a' : '#dc2626',
-                  fontWeight: 500,
-                }}>
-                  {product.stock_qty > 0 ? `${product.stock_qty} in stock` : 'Out of stock'}
+                <span
+                  className="text-xs font-medium px-2 py-0.5 rounded-full"
+                  style={{
+                    background: product.stock_qty > 0 ? '#dcfce7' : '#fee2e2',
+                    color:      product.stock_qty > 0 ? '#16a34a' : '#dc2626',
+                  }}
+                >
+                  {product.stock_qty > 0 ? 'In Stock' : 'Sold Out'}
                 </span>
               </div>
             </div>
           </article>
-        </a>
+        </Link>
       ))}
     </div>
   );
