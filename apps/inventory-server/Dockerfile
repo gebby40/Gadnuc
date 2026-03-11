@@ -30,12 +30,16 @@ ENV NODE_ENV=production
 RUN addgroup -S gadnuc && adduser -S gadnuc -G gadnuc
 
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/db/dist ./packages/db/dist
-COPY --from=builder /app/packages/auth/dist ./packages/auth/dist
-COPY --from=builder /app/packages/tenant/dist ./packages/tenant/dist
-COPY --from=builder /app/packages/feature-flags/dist ./packages/feature-flags/dist
-COPY --from=builder /app/apps/inventory-server/dist ./apps/inventory-server/dist
-COPY --from=builder /app/packages/db/src/migrations ./packages/db/src/migrations
+COPY --from=builder /app/packages/db/package.json          ./packages/db/
+COPY --from=builder /app/packages/db/dist                  ./packages/db/dist
+COPY --from=builder /app/packages/db/src/migrations        ./packages/db/src/migrations
+COPY --from=builder /app/packages/auth/package.json        ./packages/auth/
+COPY --from=builder /app/packages/auth/dist                ./packages/auth/dist
+COPY --from=builder /app/packages/tenant/package.json      ./packages/tenant/
+COPY --from=builder /app/packages/tenant/dist              ./packages/tenant/dist
+COPY --from=builder /app/packages/feature-flags/package.json  ./packages/feature-flags/
+COPY --from=builder /app/packages/feature-flags/dist          ./packages/feature-flags/dist
+COPY --from=builder /app/apps/inventory-server/dist        ./apps/inventory-server/dist
 
 USER gadnuc
 EXPOSE 3001
