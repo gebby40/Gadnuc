@@ -1,10 +1,8 @@
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { Pool } from 'pg';
 import { createPool } from './client.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
 
@@ -13,6 +11,9 @@ const MIGRATION_FILES = [
   '002_tenant_template.sql',
   '003_phase1_additions.sql',
   '004_phase2_additions.sql',
+  '005_storefront_analytics.sql',
+  '006_messaging.sql',
+  '007_stripe_connect.sql',
 ];
 
 export async function runMigrations(pool?: Pool): Promise<void> {
@@ -57,7 +58,7 @@ export async function runMigrations(pool?: Pool): Promise<void> {
 }
 
 // Allow running directly: node dist/migrate.js
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (require.main === module) {
   runMigrations()
     .then(() => process.exit(0))
     .catch((err) => { console.error(err); process.exit(1); });
