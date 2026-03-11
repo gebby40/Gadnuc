@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Produce a standalone Node.js server for Docker deployment
+  output: 'standalone',
+
   // Multi-tenant subdomain routing
   // The middleware handles tenant resolution via the Host header
   experimental: {
