@@ -109,6 +109,7 @@ services:
       - '3000:3000'
     environment:
       NODE_ENV:                    production
+      PLATFORM_DOMAIN:             ${PLATFORM_DOMAIN:-gadnuc.io}
       INVENTORY_SERVER_URL:        http://inventory-server:3001
       MANAGER_SERVER_URL:          http://server-manager:3002
       NEXT_PUBLIC_INVENTORY_URL:   ${NEXT_PUBLIC_INVENTORY_URL:-http://localhost:3001}
