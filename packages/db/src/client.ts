@@ -1,5 +1,13 @@
 import { Pool, PoolConfig } from 'pg';
 
+// DB_SSL=false disables SSL for local/Docker environments where the Postgres
+// server has no TLS certificate (e.g. docker-compose).  In production leave
+// this unset; SSL with certificate verification is enforced automatically.
+function sslConfig(): { rejectUnauthorized: boolean } | false {
+  if (process.env.DB_SSL === 'false') return false;
+  return process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false;
+}
+
 // ── Primary (read-write) pool ─────────────────────────────────────────────────
 
 let pool: Pool | null = null;
@@ -10,7 +18,7 @@ export function createPool(config?: PoolConfig): Pool {
     max:                     20,
     idleTimeoutMillis:  30_000,
     connectionTimeoutMillis: 5_000,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
+    ssl: sslConfig(),
     ...config,
   });
 
@@ -39,7 +47,7 @@ export function createReadPool(config?: PoolConfig): Pool {
     max:                     10,
     idleTimeoutMillis:  30_000,
     connectionTimeoutMillis: 5_000,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
+    ssl: sslConfig(),
     ...config,
   });
 

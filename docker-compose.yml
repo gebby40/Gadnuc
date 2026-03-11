@@ -49,6 +49,7 @@ services:
       NODE_ENV:                    production
       PORT:                        3001
       DATABASE_URL:                postgresql://${POSTGRES_USER:-gadnuc}:${POSTGRES_PASSWORD:-gadnuc}@postgres:5432/${POSTGRES_DB:-gadnuc}
+      DB_SSL:                      "false"
       REDIS_URL:                   redis://redis:6379
       JWT_SECRET:                  ${JWT_SECRET}
       JWT_REFRESH_SECRET:          ${JWT_REFRESH_SECRET}
@@ -60,10 +61,11 @@ services:
       PLATFORM_DOMAIN:             ${PLATFORM_DOMAIN:-gadnuc.io}
       ALLOWED_ORIGINS:             ${ALLOWED_ORIGINS}
     healthcheck:
-      test: ['CMD-SHELL', 'curl -sf http://localhost:3001/health || exit 1']
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ── Server Manager ────────────────────────────────────────────────────────────
   server-manager:
@@ -80,6 +82,7 @@ services:
       NODE_ENV:            production
       PORT:                3002
       DATABASE_URL:        postgresql://${POSTGRES_USER:-gadnuc}:${POSTGRES_PASSWORD:-gadnuc}@postgres:5432/${POSTGRES_DB:-gadnuc}
+      DB_SSL:              "false"
       REDIS_URL:           redis://redis:6379
       JWT_SECRET:          ${JWT_SECRET}
       JWT_REFRESH_SECRET:  ${JWT_REFRESH_SECRET}
@@ -87,10 +90,11 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       ADMIN_ORIGIN:        ${ADMIN_ORIGIN:-http://localhost:3000}
     healthcheck:
-      test: ['CMD-SHELL', 'curl -sf http://localhost:3002/health || exit 1']
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health || exit 1']
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ── Storefront (Next.js) ──────────────────────────────────────────────────────
   storefront:
