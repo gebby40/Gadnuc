@@ -4,6 +4,8 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { tenantMiddleware } from '@gadnuc/tenant';
+import { register, metricsMiddleware, updatePoolGauges } from './metrics.js';
+import { getPoolStats } from '@gadnuc/db';
 
 import { productsRouter }    from './routes/products.js';
 import { ordersRouter }      from './routes/orders.js';
@@ -54,8 +56,18 @@ export function createApp() {
     message: { error: 'Too many requests — please slow down' },
   }));
 
+  // ── Metrics middleware (before tenant so all requests are timed) ──────
+  app.use(metricsMiddleware());
+
   // ── Health check (no auth, no tenant) ────────────────────────────────
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'inventory-server' }));
+
+  // ── Prometheus scrape endpoint (internal — no auth, no tenant) ───────
+  app.get('/metrics', async (_req, res) => {
+    updatePoolGauges(getPoolStats().primary);
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  });
 
   // ── Tenant resolution (all routes below require a valid tenant) ───────
   app.use(tenantMiddleware);

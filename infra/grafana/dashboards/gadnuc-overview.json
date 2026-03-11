@@ -1,0 +1,66 @@
+{
+  "title": "Gadnuc Platform Overview",
+  "uid": "gadnuc-overview",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "title": "HTTP Request Rate (inventory-server)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum(rate(http_request_duration_seconds_count{service='inventory-server'}[2m])) by (method,route)", "legendFormat": "{{method}} {{route}}" }]
+    },
+    {
+      "id": 2, "title": "HTTP p95 Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service='inventory-server'}[2m])) by (le,route)) * 1000", "legendFormat": "p95 {{route}}" }]
+    },
+    {
+      "id": 3, "title": "Requests by Tenant (top 10)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "expr": "topk(10, sum(rate(tenant_requests_total[2m])) by (tenant_slug))", "legendFormat": "{{tenant_slug}}" }]
+    },
+    {
+      "id": 4, "title": "5xx Error Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum(rate(http_request_duration_seconds_count{status_code=~'5..'}[2m])) by (service)", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 5, "title": "DB Pool Total",   "type": "stat",
+      "gridPos": { "x": 0, "y": 16, "w": 4, "h": 4 },
+      "targets": [{ "expr": "db_pool_total_connections{service='inventory-server'}" }]
+    },
+    {
+      "id": 6, "title": "DB Pool Idle",    "type": "stat",
+      "gridPos": { "x": 4, "y": 16, "w": 4, "h": 4 },
+      "targets": [{ "expr": "db_pool_idle_connections{service='inventory-server'}" }]
+    },
+    {
+      "id": 7, "title": "DB Pool Waiting", "type": "stat",
+      "gridPos": { "x": 8, "y": 16, "w": 4, "h": 4 },
+      "targets": [{ "expr": "db_pool_waiting_requests{service='inventory-server'}" }]
+    },
+    {
+      "id": 8, "title": "Heap Used (MB)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [{ "expr": "nodejs_heap_size_used_bytes / 1024 / 1024", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 9, "title": "Event Loop Lag p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [{ "expr": "nodejs_eventloop_lag_p99_seconds * 1000", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 10, "title": "HTTP Rate (server-manager)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum(rate(http_request_duration_seconds_count{service='server-manager'}[2m])) by (method,route)", "legendFormat": "{{method}} {{route}}" }]
+    }
+  ]
+}

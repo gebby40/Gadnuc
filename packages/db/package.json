@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "migrate": "node dist/migrate.js",
+    "migrate:tenant": "tsx src/scripts/migrate-tenant.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.11.5",
+    "tsx": "^4.11.0",
     "typescript": "^5.4.5"
   }
 }

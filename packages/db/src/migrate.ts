@@ -12,6 +12,7 @@ const MIGRATION_FILES = [
   '001_public_schema.sql',
   '002_tenant_template.sql',
   '003_phase1_additions.sql',
+  '004_phase2_additions.sql',
 ];
 
 export async function runMigrations(pool?: Pool): Promise<void> {
