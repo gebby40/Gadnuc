@@ -35,7 +35,7 @@ function getStripe(): Stripe {
 
 // ── GET /api/storefront/settings ─────────────────────────────────────────────
 storefrontRouter.get('/settings', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
@@ -74,7 +74,7 @@ storefrontRouter.patch(
   requireAuth,
   requireRole('tenant_admin'),
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const parsed = patchSettingsSchema.safeParse(req.body);
@@ -114,7 +114,7 @@ storefrontRouter.patch(
 
 // ── GET /api/storefront/products ─────────────────────────────────────────────
 storefrontRouter.get('/products', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const { category, search, page = '1', limit = '24' } = req.query as Record<string, string>;
@@ -177,7 +177,7 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
 
 // ── GET /api/storefront/products/:id ─────────────────────────────────────────
 storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
@@ -202,7 +202,7 @@ storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
 
 // ── GET /api/storefront/categories ───────────────────────────────────────────
 storefrontRouter.get('/categories', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
@@ -231,7 +231,7 @@ const checkoutSchema = z.object({
 });
 
 storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const parsed = checkoutSchema.safeParse(req.body);
@@ -383,8 +383,11 @@ export async function handleStripeWebhook(req: Request, res: Response) {
   try {
     const items: Array<{ productId: string; quantity: number }> = JSON.parse(itemsJson);
 
-    // Fetch authoritative product data & build order
+    // Fetch authoritative product data & build order — wrapped in a transaction
+    // so stock decrements and order creation are atomic (idempotent on replay).
     await withTenantSchema(tenantSlug, async (db: any) => {
+      await db.query('BEGIN');
+      try {
       const productIds = items.map((i) => i.productId);
       const { rows: products } = await db.query(
         'SELECT id, name, price_cents, sku FROM products WHERE id = ANY($1::uuid[])',
@@ -435,7 +438,9 @@ export async function handleStripeWebhook(req: Request, res: Response) {
         );
       }
 
-      // Fire-and-forget confirmation email
+      await db.query('COMMIT');
+
+      // Fire-and-forget confirmation email (outside transaction)
       const email = session.customer_details?.email;
       if (email) {
         sendOrderConfirmation({
@@ -452,6 +457,10 @@ export async function handleStripeWebhook(req: Request, res: Response) {
       }
 
       return orderRows[0];
+      } catch (txErr) {
+        await db.query('ROLLBACK').catch(() => {/* ignore rollback error */});
+        throw txErr;
+      }
     });
 
     res.json({ received: true });
@@ -464,7 +473,7 @@ export async function handleStripeWebhook(req: Request, res: Response) {
 
 // ── GET /api/storefront/orders/:orderNumber ──────────────────────────────────
 storefrontRouter.get('/orders/:orderNumber', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
@@ -509,7 +518,7 @@ const analyticsSchema = z.object({
 });
 
 storefrontRouter.post('/analytics', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(204).end(); return; }
 
   const parsed = analyticsSchema.safeParse(req.body);

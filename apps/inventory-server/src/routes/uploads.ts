@@ -49,7 +49,7 @@ uploadsRouter.post(
   '/presign',
   requireAuth,
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const parsed = presignSchema.safeParse(req.body);

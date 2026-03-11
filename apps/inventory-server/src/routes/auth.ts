@@ -82,7 +82,7 @@ const loginSchema = z.object({
 });
 
 authRouter.post('/login', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const parsed = loginSchema.safeParse(req.body);
@@ -144,7 +144,7 @@ const mfaVerifySchema = z.object({
 });
 
 authRouter.post('/mfa/verify', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const parsed = mfaVerifySchema.safeParse(req.body);
@@ -198,7 +198,7 @@ authRouter.post('/mfa/verify', async (req: Request, res: Response) => {
 
 authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
   const authUser = (req as any).user as { userId: number; tenantId: number; tenantSlug: string };
-  const tenant   = (req as any).tenant as { id: number; slug: string };
+  const tenant   = (req as any).tenant as { id: string; slug: string };
 
   try {
     const existingSecret = await withTenantSchema(authUser.tenantSlug, async (db) => {
@@ -243,7 +243,7 @@ const setupConfirmSchema = z.object({ totp_code: z.string().length(6) });
 
 authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Response) => {
   const authUser = (req as any).user as { userId: number; tenantId: number; tenantSlug: string };
-  const tenant   = (req as any).tenant as { id: number; slug: string };
+  const tenant   = (req as any).tenant as { id: string; slug: string };
 
   const parsed = setupConfirmSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -289,7 +289,7 @@ const mfaDisableSchema = z.object({ totp_code: z.string().length(6) });
 
 authRouter.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => {
   const authUser = (req as any).user as { userId: number; tenantId: number; tenantSlug: string };
-  const tenant   = (req as any).tenant as { id: number; slug: string };
+  const tenant   = (req as any).tenant as { id: string; slug: string };
 
   const parsed = mfaDisableSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -337,7 +337,7 @@ authRouter.post('/mfa/disable', requireAuth, async (req: Request, res: Response)
 // ─────────────────────────────────────────────────────────────────────────────
 
 authRouter.post('/refresh', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: number; slug: string } | undefined;
+  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const incomingToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
