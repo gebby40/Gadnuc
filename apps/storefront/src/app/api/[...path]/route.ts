@@ -12,7 +12,7 @@ const UPSTREAM = process.env.INVENTORY_SERVER_URL ?? 'http://localhost:3001';
 function forwardHeaders(req: Request): HeadersInit {
   const headers: Record<string, string> = {};
   // Forward standard headers the backends need
-  for (const key of ['content-type', 'authorization', 'x-tenant-slug', 'x-forwarded-for', 'x-real-ip', 'stripe-signature']) {
+  for (const key of ['content-type', 'authorization', 'cookie', 'x-tenant-slug', 'x-forwarded-for', 'x-real-ip', 'stripe-signature']) {
     const val = req.headers.get(key);
     if (val) headers[key] = val;
   }

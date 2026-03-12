@@ -76,6 +76,16 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       [admin.id],
     ).catch(() => {});
 
+    // Set access token as HttpOnly cookie so browser-side `credentials: 'include'`
+    // works for subsequent requests (the cookie is forwarded by the proxy layer).
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure:   process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge:   24 * 60 * 60 * 1000, // 1 day — matches JWT expiry
+      path:     '/',
+    });
+
     res.json({ access_token: accessToken, token_type: 'Bearer' });
   } catch (err) {
     console.error('[auth] platform login error:', err);
@@ -87,5 +97,6 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
 authRouter.post('/logout', (_req: Request, res: Response) => {
   res.clearCookie(REFRESH_COOKIE_NAME, { httpOnly: true, sameSite: 'strict', path: '/api/auth' });
+  res.clearCookie('access_token', { httpOnly: true, sameSite: 'strict', path: '/' });
   res.json({ message: 'Logged out' });
 });

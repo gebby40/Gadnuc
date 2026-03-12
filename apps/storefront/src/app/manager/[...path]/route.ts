@@ -11,7 +11,7 @@ const UPSTREAM = process.env.MANAGER_SERVER_URL ?? 'http://localhost:3002';
 
 function forwardHeaders(req: Request): HeadersInit {
   const headers: Record<string, string> = {};
-  for (const key of ['content-type', 'authorization', 'x-forwarded-for', 'x-real-ip', 'stripe-signature']) {
+  for (const key of ['content-type', 'authorization', 'cookie', 'x-forwarded-for', 'x-real-ip', 'stripe-signature']) {
     const val = req.headers.get(key);
     if (val) headers[key] = val;
   }
