@@ -5,6 +5,7 @@ import { ThemeProvider }     from '@/components/ThemeProvider';
 import { CartProvider }      from '@/components/CartProvider';
 import { StorefrontNav }     from '@/components/StorefrontNav';
 import { StorefrontFooter }  from '@/components/StorefrontFooter';
+import { StorefrontShell }   from '@/components/StorefrontShell';
 
 interface Props {
   children: React.ReactNode;
@@ -44,22 +45,25 @@ export default async function TenantLayout({ children, params }: Props) {
           <style dangerouslySetInnerHTML={{ __html: settings.custom_css }} />
         )}
 
-        <StorefrontNav
-          slug={params.slug}
-          logoUrl={settings.logo_url ?? null}
-          storeName={settings.seo_title ?? params.slug}
-        />
-
-        <main className="flex-1" style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
+        <StorefrontShell
+          nav={
+            <StorefrontNav
+              slug={params.slug}
+              logoUrl={settings.logo_url ?? null}
+              storeName={settings.seo_title ?? params.slug}
+            />
+          }
+          footer={
+            <StorefrontFooter
+              contactEmail={settings.contact_email ?? null}
+              contactPhone={settings.contact_phone ?? null}
+              socialLinks={settings.social_links ?? {}}
+              storeName={settings.seo_title ?? params.slug}
+            />
+          }
+        >
           {children}
-        </main>
-
-        <StorefrontFooter
-          contactEmail={settings.contact_email ?? null}
-          contactPhone={settings.contact_phone ?? null}
-          socialLinks={settings.social_links ?? {}}
-          storeName={settings.seo_title ?? params.slug}
-        />
+        </StorefrontShell>
       </ThemeProvider>
     </CartProvider>
   );
