@@ -1,0 +1,145 @@
+name: gadnuc
+region: nyc
+
+services:
+  # ── Inventory Server ────────────────────────────────────────────────────────
+  - name: inventory-server
+    dockerfile_path: apps/inventory-server/Dockerfile
+    github:
+      repo: gebby40/Gadnuc
+      branch: main
+      deploy_on_push: true
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 15
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: DB_SSL
+        value: "true"
+      - key: REDIS_URL
+        type: SECRET
+      - key: JWT_SECRET
+        type: SECRET
+      - key: TOTP_ENCRYPTION_KEY
+        type: SECRET
+      - key: STRIPE_SECRET_KEY
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        type: SECRET
+      - key: STRIPE_CONNECT_CLIENT_ID
+        type: SECRET
+      - key: STRIPE_CONNECT_REDIRECT_URI
+        value: https://gadnuc.com/api/stripe-connect/callback
+      - key: PLATFORM_FEE_PCT
+        value: "5"
+      - key: PLATFORM_DOMAIN
+        value: gadnuc.com
+      - key: ALLOWED_ORIGINS
+        value: https://gadnuc.com
+      - key: SMTP_HOST
+        value: smtp.mailgun.org
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        type: SECRET
+      - key: SMTP_PASS
+        type: SECRET
+      - key: EMAIL_FROM
+        value: orders@gadnuc.com
+      - key: DO_SPACES_KEY
+        type: SECRET
+      - key: DO_SPACES_SECRET
+        type: SECRET
+      - key: DO_SPACES_BUCKET
+        value: gadnuc-media
+      - key: DO_SPACES_REGION
+        value: nyc3
+
+  # ── Server Manager ─────────────────────────────────────────────────────────
+  - name: server-manager
+    dockerfile_path: apps/server-manager/Dockerfile
+    github:
+      repo: gebby40/Gadnuc
+      branch: main
+      deploy_on_push: true
+    http_port: 3002
+    instance_count: 1
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 15
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3002"
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: DB_SSL
+        value: "true"
+      - key: REDIS_URL
+        type: SECRET
+      - key: JWT_SECRET
+        type: SECRET
+      - key: STRIPE_SECRET_KEY
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        type: SECRET
+      - key: ADMIN_ORIGIN
+        value: https://gadnuc.com
+
+  # ── Storefront (Next.js) ───────────────────────────────────────────────────
+  - name: storefront
+    dockerfile_path: apps/storefront/Dockerfile
+    github:
+      repo: gebby40/Gadnuc
+      branch: main
+      deploy_on_push: true
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /
+      initial_delay_seconds: 30
+      period_seconds: 15
+    routes:
+      - path: /
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PLATFORM_DOMAIN
+        value: gadnuc.com
+      - key: INVENTORY_SERVER_URL
+        value: ${inventory-server.PRIVATE_URL}
+      - key: MANAGER_SERVER_URL
+        value: ${server-manager.PRIVATE_URL}
+      - key: NEXT_PUBLIC_INVENTORY_URL
+        scope: BUILD_TIME
+        value: https://gadnuc.com/api
+      - key: NEXT_PUBLIC_MANAGER_URL
+        scope: BUILD_TIME
+        value: https://gadnuc.com/manager
+      - key: NEXT_PUBLIC_WS_URL
+        scope: BUILD_TIME
+        value: wss://gadnuc.com
+
+databases:
+  - name: gadnuc-db
+    engine: PG
+    version: "16"
+    size: db-s-1vcpu-1gb
+    num_nodes: 1
