@@ -138,6 +138,10 @@ services:
       - key: ADMIN_ORIGIN
         value: https://gadnuc.com
 
+domains:
+  - domain: gadnuc.com
+    type: PRIMARY
+
 databases:
   - name: gadnuc-db
     engine: PG
