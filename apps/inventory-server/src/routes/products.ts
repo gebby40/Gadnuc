@@ -7,6 +7,14 @@ import { logAuditEvent } from '../middleware/audit.js';
 
 export const productsRouter = Router();
 
+// Helper: escape a value for CSV output
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
 // All product routes require authentication
 productsRouter.use(requireAuth);
 
@@ -28,10 +36,12 @@ const UPDATABLE_PRODUCT_FIELDS = new Set([
   'low_stock_threshold', 'image_url', 'is_active', 'metadata',
 ]);
 
-// GET /api/products — list all products for this tenant
+// GET /api/products — list all products for this tenant (with pagination)
 productsRouter.get('/', async (req, res) => {
   const slug = req.tenantSlug!;
   const { category, search, active } = req.query;
+  const limit  = Math.min(Math.max(parseInt(req.query.limit as string)  || 50, 1), 200);
+  const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
   try {
     await withTenantSchema(slug, async (db) => {
@@ -51,14 +61,218 @@ productsRouter.get('/', async (req, res) => {
         conditions.push(`(name ILIKE $${params.length} OR sku ILIKE $${params.length})`);
       }
 
-      const { rows } = await db.query(
-        `SELECT * FROM products WHERE ${conditions.join(' AND ')} ORDER BY name ASC`,
+      const where = conditions.join(' AND ');
+
+      // Get total count
+      const countResult = await db.query(
+        `SELECT COUNT(*)::int AS total FROM products WHERE ${where}`,
         params
       );
-      res.json({ data: rows });
+      const total = countResult.rows[0]?.total ?? 0;
+
+      // Get paginated rows
+      params.push(limit, offset);
+      const { rows } = await db.query(
+        `SELECT * FROM products WHERE ${where} ORDER BY name ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+      );
+      res.json({ data: rows, pagination: { total, limit, offset } });
     });
   } catch (err) {
     console.error('[products] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/products/export — download all products as CSV
+productsRouter.get('/export', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        'SELECT sku, name, description, category, price_cents, stock_qty, low_stock_threshold, image_url, is_active FROM products ORDER BY name ASC'
+      );
+
+      const csvHeaders = 'sku,name,description,category,price_cents,stock_qty,low_stock_threshold,image_url,is_active';
+      const csvRows = rows.map(r => {
+        return [
+          csvEscape(r.sku),
+          csvEscape(r.name),
+          csvEscape(r.description ?? ''),
+          csvEscape(r.category ?? ''),
+          String(r.price_cents),
+          String(r.stock_qty),
+          String(r.low_stock_threshold),
+          csvEscape(r.image_url ?? ''),
+          String(r.is_active),
+        ].join(',');
+      });
+
+      const csv = [csvHeaders, ...csvRows].join('\n');
+      res.set('Content-Type', 'text/csv');
+      res.set('Content-Disposition', 'attachment; filename="products.csv"');
+      res.send(csv);
+    });
+  } catch (err) {
+    console.error('[products] Export error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/bulk — bulk update multiple products
+productsRouter.patch('/bulk', requireRole('operator'), async (req, res) => {
+  const bulkSchema = z.object({
+    updates: z.array(z.object({
+      id: z.string().uuid(),
+    }).catchall(z.unknown())).min(1).max(200),
+  });
+
+  const parse = bulkSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
+    return;
+  }
+
+  const { updates } = parse.data;
+  const results: { updated: number; errors: { id: string; error: string }[] } = { updated: 0, errors: [] };
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      await db.query('BEGIN');
+      try {
+        for (const item of updates) {
+          const { id, ...fieldValues } = item;
+
+          // Validate fields through partial product schema
+          const fieldParse = productSchema.partial().safeParse(fieldValues);
+          if (!fieldParse.success) {
+            results.errors.push({ id, error: fieldParse.error.errors.map(e => e.message).join(', ') });
+            continue;
+          }
+
+          const fields = (Object.keys(fieldParse.data) as Array<keyof typeof fieldParse.data>)
+            .filter(f => UPDATABLE_PRODUCT_FIELDS.has(f));
+          if (fields.length === 0) {
+            results.errors.push({ id, error: 'No updatable fields provided' });
+            continue;
+          }
+
+          const setClauses = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
+          const values = fields.map(f => f === 'metadata' ? JSON.stringify(fieldParse.data[f]) : fieldParse.data[f]);
+
+          const { rowCount } = await db.query(
+            `UPDATE products SET ${setClauses}, updated_at = now() WHERE id = $1`,
+            [id, ...values]
+          );
+
+          if (rowCount) {
+            results.updated++;
+            logAuditEvent({ req, action: 'product.updated', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: id, bulk: true } });
+          } else {
+            results.errors.push({ id, error: 'Product not found' });
+          }
+        }
+        await db.query('COMMIT');
+      } catch (txErr) {
+        await db.query('ROLLBACK');
+        throw txErr;
+      }
+    });
+
+    res.json(results);
+  } catch (err) {
+    console.error('[products] Bulk update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/import — bulk create/upsert from parsed CSV data
+productsRouter.post('/import', requireRole('operator'), async (req, res) => {
+  const importSchema = z.object({
+    rows: z.array(productSchema).min(1).max(500),
+    mode: z.enum(['create', 'upsert']),
+  });
+
+  const parse = importSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
+    return;
+  }
+
+  const { rows: importRows, mode } = parse.data;
+  const results: { created: number; updated: number; errors: { row: number; error: string }[] } = {
+    created: 0, updated: 0, errors: [],
+  };
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      await db.query('BEGIN');
+      try {
+        for (let i = 0; i < importRows.length; i++) {
+          const d = importRows[i];
+          try {
+            if (mode === 'upsert') {
+              // Try INSERT, on conflict UPDATE
+              const { rows: upserted } = await db.query(
+                `INSERT INTO products
+                   (sku, name, description, category, price_cents, stock_qty,
+                    low_stock_threshold, image_url, is_active, metadata)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                 ON CONFLICT (sku) DO UPDATE SET
+                   name = EXCLUDED.name,
+                   description = EXCLUDED.description,
+                   category = EXCLUDED.category,
+                   price_cents = EXCLUDED.price_cents,
+                   stock_qty = EXCLUDED.stock_qty,
+                   low_stock_threshold = EXCLUDED.low_stock_threshold,
+                   image_url = EXCLUDED.image_url,
+                   is_active = EXCLUDED.is_active,
+                   metadata = EXCLUDED.metadata,
+                   updated_at = now()
+                 RETURNING (xmax = 0) AS is_insert`,
+                [d.sku, d.name, d.description ?? null, d.category ?? null,
+                 d.price_cents, d.stock_qty, d.low_stock_threshold,
+                 d.image_url ?? null, d.is_active, JSON.stringify(d.metadata)]
+              );
+              if (upserted[0]?.is_insert) {
+                results.created++;
+                logAuditEvent({ req, action: 'product.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { sku: d.sku, import: true } });
+              } else {
+                results.updated++;
+                logAuditEvent({ req, action: 'product.updated', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { sku: d.sku, import: true } });
+              }
+            } else {
+              // Create only
+              await db.query(
+                `INSERT INTO products
+                   (sku, name, description, category, price_cents, stock_qty,
+                    low_stock_threshold, image_url, is_active, metadata)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                [d.sku, d.name, d.description ?? null, d.category ?? null,
+                 d.price_cents, d.stock_qty, d.low_stock_threshold,
+                 d.image_url ?? null, d.is_active, JSON.stringify(d.metadata)]
+              );
+              results.created++;
+              logAuditEvent({ req, action: 'product.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { sku: d.sku, import: true } });
+            }
+          } catch (rowErr: unknown) {
+            const code = (rowErr as { code?: string }).code;
+            if (code === '23505') {
+              results.errors.push({ row: i, error: `SKU "${d.sku}" already exists` });
+            } else {
+              results.errors.push({ row: i, error: (rowErr as Error).message ?? 'Unknown error' });
+            }
+          }
+        }
+        await db.query('COMMIT');
+      } catch (txErr) {
+        await db.query('ROLLBACK');
+        throw txErr;
+      }
+    });
+
+    res.json(results);
+  } catch (err) {
+    console.error('[products] Import error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

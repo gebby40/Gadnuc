@@ -26,10 +26,10 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
   if (!user) return null;
 
   const navItems = [
-    { href: `/tenant/${slug}/dashboard`,          label: 'Overview' },
-    { href: `/tenant/${slug}/products`,            label: 'Products' },
-    { href: `/tenant/${slug}/workspace`,           label: 'Workspace' },
-    { href: `/tenant/${slug}/settings`,            label: 'Settings' },
+    { href: `/tenant/${slug}/dashboard`,            label: 'Overview' },
+    { href: `/tenant/${slug}/dashboard/products`,   label: 'Products' },
+    { href: `/tenant/${slug}/workspace`,            label: 'Workspace' },
+    { href: `/tenant/${slug}/settings`,             label: 'Settings' },
   ];
 
   return (
@@ -48,7 +48,9 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
 
         <nav style={{ flex: 1, padding: '1rem 0' }}>
           {navItems.map(({ href, label }) => {
-            const active = pathname === href;
+            const active = href === `/tenant/${slug}/dashboard`
+              ? pathname === href
+              : pathname.startsWith(href);
             return (
               <Link key={href} href={href} style={{
                 display: 'block', padding: '0.6rem 1.25rem',
