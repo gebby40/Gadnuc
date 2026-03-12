@@ -6,9 +6,12 @@ interface HeroProps {
   imageUrl?:    string | null;
   primaryColor: string;
   slug:         string;
+  enabled?:     boolean;
 }
 
-export function HeroSection({ title, subtitle, imageUrl, primaryColor, slug }: HeroProps) {
+export function HeroSection({ title, subtitle, imageUrl, primaryColor, slug, enabled = true }: HeroProps) {
+  if (!enabled) return null;
+
   return (
     <section
       style={{

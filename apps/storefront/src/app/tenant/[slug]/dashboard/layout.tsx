@@ -28,8 +28,9 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
   const navItems = [
     { href: `/tenant/${slug}/dashboard`,            label: 'Overview' },
     { href: `/tenant/${slug}/dashboard/products`,   label: 'Products' },
+    { href: `/tenant/${slug}/dashboard/appearance`,  label: 'Appearance' },
+    { href: `/tenant/${slug}/dashboard/settings`,    label: 'Settings' },
     { href: `/tenant/${slug}/workspace`,            label: 'Workspace' },
-    { href: `/tenant/${slug}/settings`,             label: 'Settings' },
   ];
 
   return (

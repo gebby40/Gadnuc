@@ -22,6 +22,7 @@ export default async function TenantHomePage({ params }: PageProps) {
         imageUrl={settings.hero_image_url ?? null}
         primaryColor={settings.primary_color ?? '#0070f3'}
         slug={params.slug}
+        enabled={settings.hero_enabled !== false}
       />
 
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12">

@@ -14,24 +14,31 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const settings = await getTenantSettings(params.slug);
+  const displayName = settings.store_name ?? settings.seo_title ?? params.slug;
   return {
     title: {
-      default:  settings.seo_title ?? settings.hero_title ?? params.slug,
-      template: `%s | ${settings.seo_title ?? params.slug}`,
+      default:  settings.seo_title ?? displayName,
+      template: `%s | ${displayName}`,
     },
     description: settings.seo_description ?? undefined,
     openGraph: {
-      siteName: settings.seo_title ?? params.slug,
+      siteName: displayName,
     },
   };
 }
 
 export default async function TenantLayout({ children, params }: Props) {
   const settings = await getTenantSettings(params.slug);
+  const displayName = settings.store_name ?? settings.seo_title ?? params.slug;
+
   const themeVars = resolveTheme(
     settings.theme,
     settings.primary_color,
     settings.accent_color,
+    settings.nav_bg_color,
+    settings.nav_text_color,
+    settings.footer_bg_color,
+    settings.footer_text_color,
   );
 
   return (
@@ -50,7 +57,7 @@ export default async function TenantLayout({ children, params }: Props) {
             <StorefrontNav
               slug={params.slug}
               logoUrl={settings.logo_url ?? null}
-              storeName={settings.seo_title ?? params.slug}
+              storeName={displayName}
             />
           }
           footer={
@@ -58,7 +65,7 @@ export default async function TenantLayout({ children, params }: Props) {
               contactEmail={settings.contact_email ?? null}
               contactPhone={settings.contact_phone ?? null}
               socialLinks={settings.social_links ?? {}}
-              storeName={settings.seo_title ?? params.slug}
+              storeName={displayName}
             />
           }
         >

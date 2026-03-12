@@ -17,19 +17,25 @@ function tenantHeaders(slug: string): HeadersInit {
 
 // ── Storefront settings ───────────────────────────────────────────────────────
 export interface StorefrontSettings {
-  theme?:          string;
-  logo_url?:       string | null;
-  hero_title?:     string;
-  hero_subtitle?:  string | null;
-  hero_image_url?: string | null;
-  primary_color?:  string;
-  accent_color?:   string;
-  contact_email?:  string | null;
-  contact_phone?:  string | null;
-  social_links?:   Record<string, string>;
-  seo_title?:      string | null;
-  seo_description?:string | null;
-  custom_css?:     string | null;
+  theme?:            string;
+  logo_url?:         string | null;
+  hero_title?:       string;
+  hero_subtitle?:    string | null;
+  hero_image_url?:   string | null;
+  hero_enabled?:     boolean;
+  primary_color?:    string;
+  accent_color?:     string;
+  nav_bg_color?:     string | null;
+  nav_text_color?:   string | null;
+  footer_bg_color?:  string | null;
+  footer_text_color?:string | null;
+  store_name?:       string | null;
+  contact_email?:    string | null;
+  contact_phone?:    string | null;
+  social_links?:     Record<string, string>;
+  seo_title?:        string | null;
+  seo_description?:  string | null;
+  custom_css?:       string | null;
 }
 
 export const getTenantSettings = cache(async (slug: string): Promise<StorefrontSettings> => {
@@ -73,13 +79,14 @@ export interface ProductListResult {
 
 export async function getProducts(
   slug: string,
-  params: { category?: string; search?: string; page?: number; limit?: number } = {},
+  params: { category?: string; search?: string; page?: number; limit?: number; sort?: string } = {},
 ): Promise<ProductListResult> {
   const qs = new URLSearchParams();
   if (params.category) qs.set('category', params.category);
   if (params.search)   qs.set('search',   params.search);
   if (params.page)     qs.set('page',     String(params.page));
   if (params.limit)    qs.set('limit',    String(params.limit));
+  if (params.sort)     qs.set('sort',     params.sort);
 
   try {
     const res = await fetch(apiUrl(`/api/storefront/products?${qs}`), {

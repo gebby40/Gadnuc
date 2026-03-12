@@ -53,21 +53,26 @@ storefrontRouter.get('/settings', async (req: Request, res: Response) => {
 
 // ── PATCH /api/storefront/settings ───────────────────────────────────────────
 const patchSettingsSchema = z.object({
-  store_name:    z.string().min(1).max(100).optional(),
-  tagline:       z.string().max(255).optional(),
-  theme:         z.enum(['default', 'dark', 'minimal', 'bold']).optional(),
-  logo_url:      z.string().url().optional(),
-  hero_title:    z.string().max(200).optional(),
-  hero_subtitle: z.string().max(500).optional(),
-  hero_image_url: z.string().url().optional(),
-  primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  accent_color:  z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  contact_email: z.string().email().optional(),
-  contact_phone: z.string().max(30).optional(),
-  social_links:  z.record(z.string()).optional(),
-  seo_title:     z.string().max(70).optional(),
-  seo_description: z.string().max(160).optional(),
-  custom_css:    z.string().optional(),
+  store_name:       z.string().min(1).max(100).optional(),
+  tagline:          z.string().max(255).optional(),
+  theme:            z.enum(['default', 'dark', 'minimal', 'bold', 'clean']).optional(),
+  logo_url:         z.string().url().optional(),
+  hero_title:       z.string().max(200).optional(),
+  hero_subtitle:    z.string().max(500).optional(),
+  hero_image_url:   z.string().url().optional(),
+  hero_enabled:     z.boolean().optional(),
+  primary_color:    z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  accent_color:     z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  nav_bg_color:     z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  nav_text_color:   z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  footer_bg_color:  z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  footer_text_color:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  contact_email:    z.string().email().optional(),
+  contact_phone:    z.string().max(30).optional(),
+  social_links:     z.record(z.string()).optional(),
+  seo_title:        z.string().max(70).optional(),
+  seo_description:  z.string().max(160).optional(),
+  custom_css:       z.string().optional(),
 }).strict();
 
 storefrontRouter.patch(
@@ -118,10 +123,19 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
   const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
-  const { category, search, page = '1', limit = '24' } = req.query as Record<string, string>;
+  const { category, search, page = '1', limit = '24', sort = 'name_asc' } = req.query as Record<string, string>;
   const pageNum  = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 24));
   const offset   = (pageNum - 1) * limitNum;
+
+  const SORT_MAP: Record<string, string> = {
+    name_asc:   'name ASC',
+    name_desc:  'name DESC',
+    price_asc:  'price_cents ASC',
+    price_desc: 'price_cents DESC',
+    newest:     'created_at DESC',
+  };
+  const orderBy = SORT_MAP[sort] ?? 'name ASC';
 
   try {
     const { rows, total } = await withTenantSchema(tenant.slug, async (db) => {
@@ -154,7 +168,7 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
         `SELECT id, sku, name, description, category, price_cents, stock_qty, image_url, metadata
          FROM products
          WHERE ${where}
-         ORDER BY name ASC
+         ORDER BY ${orderBy}
          LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
