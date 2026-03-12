@@ -53,6 +53,7 @@ export default async function TenantLayout({ children, params }: Props) {
         )}
 
         <StorefrontShell
+          slug={params.slug}
           nav={
             <StorefrontNav
               slug={params.slug}
