@@ -12,11 +12,12 @@ function formatPrice(cents: number): string {
 }
 
 /**
- * WooCommerce-style product grid with fixed column counts.
+ * WooCommerce-style product grid.
  *
- * Layout: 2 cols mobile → 3 cols tablet → 4 cols desktop
- * Images: square 1:1 thumbnails (like WooCommerce default),
- *         max 260px wide, served as optimised WebP via Next.js.
+ * Layout : 2 cols mobile → 3 cols tablet → 4 cols desktop
+ * Images : object-contain inside a square card so the full product
+ *          image is always visible (no cropping), with padding and
+ *          a subtle background — exactly like WooCommerce thumbnails.
  */
 export function ProductGrid({ products, tenantSlug }: Props) {
   if (!products.length) {
@@ -37,9 +38,9 @@ export function ProductGrid({ products, tenantSlug }: Props) {
           style={{ textDecoration: 'none', color: 'inherit' }}
         >
           <article className="group cursor-pointer">
-            {/* Square thumbnail like WooCommerce */}
+            {/* Square thumbnail — object-contain keeps full image visible */}
             <div
-              className="relative overflow-hidden mb-2 sm:mb-3"
+              className="relative overflow-hidden mb-2 sm:mb-3 p-3"
               style={{
                 aspectRatio: '1 / 1',
                 background: 'var(--color-bg-secondary)',
@@ -52,7 +53,7 @@ export function ProductGrid({ products, tenantSlug }: Props) {
                   alt={product.name}
                   fill
                   sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 260px"
-                  className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                  className="object-contain p-2 group-hover:scale-105 transition-transform duration-500 ease-out"
                   quality={80}
                 />
               ) : (

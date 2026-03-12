@@ -53,15 +53,15 @@ export default async function ProductDetailPage({ params }: PageProps) {
       </nav>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
-        {/* Image — constrained like WooCommerce single-product (max ~450px) */}
+        {/* Image — contain mode so full image is visible, like WooCommerce */}
         <div
-          className="relative rounded-2xl overflow-hidden mx-auto w-full"
+          className="relative rounded-2xl overflow-hidden mx-auto w-full p-4"
           style={{
             aspectRatio: '1',
             background:   'var(--color-bg-secondary)',
             border:       '1px solid var(--color-border)',
-            maxWidth:     '450px',
-            maxHeight:    '450px',
+            maxWidth:     '420px',
+            maxHeight:    '420px',
           }}
         >
           {product.image_url ? (
@@ -69,8 +69,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
               src={product.image_url}
               alt={product.name}
               fill
-              sizes="(max-width: 768px) 90vw, 450px"
-              className="object-cover"
+              sizes="(max-width: 768px) 85vw, 420px"
+              className="object-contain p-2"
               quality={85}
               priority
             />
