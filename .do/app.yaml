@@ -96,6 +96,8 @@ services:
         type: SECRET
       - key: DO_SPACES_SECRET
         type: SECRET
+      - key: DO_SPACES_ENDPOINT
+        value: nyc3.digitaloceanspaces.com
       - key: DO_SPACES_BUCKET
         value: gadnuc-media
       - key: DO_SPACES_REGION
