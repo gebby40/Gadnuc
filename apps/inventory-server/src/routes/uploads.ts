@@ -6,7 +6,7 @@
 
 import { Router }            from 'express';
 import { z }                 from 'zod';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, PutObjectAclCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl }      from '@aws-sdk/s3-request-presigner';
 import { requireAuth }       from '@gadnuc/auth';
 import { withTenantSchema }  from '@gadnuc/db';
@@ -105,6 +105,61 @@ uploadsRouter.post(
     } catch (err) {
       console.error('[uploads] presign error:', err);
       res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+  },
+);
+
+/**
+ * POST /api/uploads/confirm
+ *
+ * After the client PUTs the file to Spaces, call this to:
+ *  1. Verify the object exists (HeadObject)
+ *  2. Explicitly set ACL to public-read  (DO Spaces ignores ACL in presigned URLs)
+ */
+const confirmSchema = z.object({
+  key: z.string().min(1).max(500),
+});
+
+uploadsRouter.post(
+  '/confirm',
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const tenant = req.tenant;
+    if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
+
+    const parsed = confirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json({ error: 'Validation failed', issues: parsed.error.issues });
+      return;
+    }
+
+    const { key } = parsed.data;
+    const bucket = process.env.DO_SPACES_BUCKET;
+    if (!bucket) { res.status(500).json({ error: 'DO_SPACES_BUCKET not configured' }); return; }
+
+    // Security: ensure the key belongs to this tenant
+    if (!key.startsWith(`tenants/${tenant.slug}/`)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    try {
+      const s3 = getS3();
+
+      // Verify object exists
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+
+      // Explicitly set public-read ACL (DO Spaces ignores ACL in presigned URLs)
+      await s3.send(new PutObjectAclCommand({ Bucket: bucket, Key: key, ACL: 'public-read' }));
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+        res.status(404).json({ error: 'Object not found — upload may have failed' });
+        return;
+      }
+      console.error('[uploads] confirm error:', err);
+      res.status(500).json({ error: 'Failed to confirm upload' });
     }
   },
 );

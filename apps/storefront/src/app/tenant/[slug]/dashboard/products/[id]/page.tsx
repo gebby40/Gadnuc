@@ -71,7 +71,7 @@ export default function EditProductPage() {
     if (!token) return;
     setUploading(true);
     try {
-      const presignRes = await tenantPost<{ uploadUrl: string; publicUrl: string }>(
+      const presignRes = await tenantPost<{ uploadUrl: string; publicUrl: string; key: string }>(
         slug, token, '/api/uploads/presign', {
           filename: file.name,
           contentType: file.type,
@@ -83,6 +83,8 @@ export default function EditProductPage() {
         headers: { 'Content-Type': file.type },
         body: file,
       });
+      // Confirm upload & set public-read ACL (DO Spaces ignores ACL in presigned URLs)
+      await tenantPost(slug, token, '/api/uploads/confirm', { key: presignRes.key });
       update('image_url', presignRes.publicUrl);
     } catch (err: any) {
       setError(err.message ?? 'Image upload failed');
