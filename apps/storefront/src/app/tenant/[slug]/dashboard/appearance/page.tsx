@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuth } from '../../../../../../components/AuthProvider';
-import { tenantGet, tenantPatch, tenantPost } from '../../../../../../lib/api';
-import { THEME_NAMES, THEME_META } from '../../../../../../lib/themes';
-import type { ThemeName } from '../../../../../../lib/themes';
+import { useAuth } from '@/components/AuthProvider';
+import { tenantGet, tenantPatch, tenantPost } from '@/lib/api';
+import { THEME_NAMES, THEME_META } from '@/lib/themes';
+import type { ThemeName } from '@/lib/themes';
 
 interface Settings {
   theme?: string;
