@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireRole } from '@gadnuc/auth';
+import { randomUUID } from 'node:crypto';
+import { requireAuth, requireRole, hashPassword } from '@gadnuc/auth';
 import { getPool, purgeAllTenantData, provisionTenantSchema, withTenantSchema } from '@gadnuc/db';
 import { invalidateTenantCache } from '@gadnuc/tenant';
 
@@ -15,6 +16,15 @@ const createTenantSchema = z.object({
   plan_name:    z.enum(['starter', 'professional', 'enterprise']).default('starter'),
 });
 
+const provisionSchema = z.object({
+  slug:           z.string().min(2).max(63).regex(/^[a-z0-9_]+$/),
+  display_name:   z.string().min(1).max(255),
+  plan:           z.enum(['starter', 'professional', 'enterprise']).default('starter'),
+  owner_email:    z.string().email(),
+  owner_name:     z.string().min(1).max(255),
+  owner_password: z.string().min(6),
+});
+
 const updateTenantSchema = z.object({
   display_name:  z.string().min(1).max(255).optional(),
   custom_domain: z.string().max(255).nullable().optional(),
@@ -23,6 +33,83 @@ const updateTenantSchema = z.object({
 
 const suspendSchema = z.object({
   reason: z.string().max(500).optional(),
+});
+
+// ── POST /api/tenants/provision — full tenant + owner creation ───────────────
+// IMPORTANT: this must be defined before /:id routes so Express doesn't
+// match "provision" as a UUID param.
+
+tenantsRouter.post('/provision', async (req, res) => {
+  const parse = provisionSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
+    return;
+  }
+
+  const { slug, display_name, plan, owner_email, owner_name, owner_password } = parse.data;
+  const pool = getPool();
+
+  // Look up plan
+  const { rows: [planRow] } = await pool.query(
+    'SELECT id FROM public.plans WHERE name = $1', [plan],
+  );
+  if (!planRow) { res.status(400).json({ error: `Plan "${plan}" not found` }); return; }
+
+  let tenant: { id: string; slug: string } | undefined;
+  try {
+    // 1. Insert tenant record
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO public.tenants (slug, display_name, plan_id, provisioning_state)
+       VALUES ($1, $2, $3, 'provisioning') RETURNING *`,
+      [slug, display_name, planRow.id],
+    );
+    tenant = row;
+
+    // 2. Provision the tenant schema (clone template)
+    await provisionTenantSchema(pool, slug, tenant!.id);
+
+    // 3. Create the owner user inside the tenant schema
+    const ownerUserId = randomUUID();
+    const pwHash = await hashPassword(owner_password);
+    const username = owner_email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').slice(0, 50);
+
+    await withTenantSchema(slug, async (db: any) => {
+      await db.query(
+        `INSERT INTO users (auth_user_id, username, email, display_name, role, password_hash)
+         VALUES ($1, $2, $3, $4, 'tenant_admin', $5)`,
+        [ownerUserId, username, owner_email, owner_name, pwHash],
+      );
+    });
+
+    // 4. Auto-provision #general messaging room (best-effort)
+    try {
+      await withTenantSchema(slug, async (db: any) => {
+        await db.query(
+          `INSERT INTO messaging_rooms (name, topic, room_type, is_public)
+           VALUES ('general', 'General team discussion', 'channel', false)
+           ON CONFLICT DO NOTHING`,
+        );
+      });
+    } catch {
+      // Non-fatal — messaging tables may not exist yet
+    }
+
+    console.log(`[tenants] Provisioned tenant: ${slug} (${tenant!.id}) with owner ${owner_email}`);
+    res.status(201).json({ data: tenant });
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'Tenant slug already exists' });
+      return;
+    }
+    if (tenant?.id) {
+      await pool.query(
+        `UPDATE public.tenants SET provisioning_state = 'failed' WHERE id = $1`,
+        [tenant.id],
+      ).catch(() => {});
+    }
+    console.error('[tenants] Provision error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // ── GET /api/tenants ──────────────────────────────────────────────────────────
