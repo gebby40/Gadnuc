@@ -42,9 +42,9 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
   try {
     const { rows } = await getPool().query<{
-      id: string; email: string; username: string; password_hash: string;
+      id: string; email: string; display_name: string; password_hash: string;
     }>(
-      `SELECT id, email, username, password_hash
+      `SELECT id, email, display_name, password_hash
        FROM public.platform_admins
        WHERE email = $1 AND is_active = true
        LIMIT 1`,
@@ -72,7 +72,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
     // Update last login
     await getPool().query(
-      'UPDATE public.platform_admins SET updated_at = now() WHERE id = $1',
+      'UPDATE public.platform_admins SET last_login_at = now(), updated_at = now() WHERE id = $1',
       [admin.id],
     ).catch(() => {});
 
