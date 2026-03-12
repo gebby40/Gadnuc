@@ -9,13 +9,27 @@ function sslConfig(): { rejectUnauthorized: boolean } | false {
   return process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false;
 }
 
+// Strip sslmode from the connection URL so our ssl config takes precedence.
+// The pg driver's connection-string parser treats sslmode=require as verify-full,
+// which rejects DigitalOcean's self-signed CA certificate.
+function cleanConnectionUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('sslmode');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 // ── Primary (read-write) pool ─────────────────────────────────────────────────
 
 let pool: Pool | null = null;
 
 export function createPool(config?: PoolConfig): Pool {
   pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: cleanConnectionUrl(process.env.DATABASE_URL),
     max:                     20,
     idleTimeoutMillis:  30_000,
     connectionTimeoutMillis: 5_000,
@@ -45,7 +59,7 @@ let readPool: Pool | null = null;
 export function createReadPool(config?: PoolConfig): Pool {
   const url = process.env.DATABASE_REPLICA_URL ?? process.env.DATABASE_URL;
   readPool = new Pool({
-    connectionString: url,
+    connectionString: cleanConnectionUrl(url),
     max:                     10,
     idleTimeoutMillis:  30_000,
     connectionTimeoutMillis: 5_000,
