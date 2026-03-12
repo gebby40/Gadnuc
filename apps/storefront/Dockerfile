@@ -11,10 +11,14 @@ COPY tsconfig.base.json ./
 COPY packages/auth/ ./packages/auth/
 COPY apps/storefront/ ./apps/storefront/
 
-# Build packages (no layer caching — source changes must trigger rebuild)
+# DO App Platform passes BUILD_TIME env vars as Docker build args.
+# Declare them so Next.js can bake them into the client bundle.
+ARG NEXT_PUBLIC_INVENTORY_URL
+ARG NEXT_PUBLIC_MANAGER_URL
+ARG NEXT_PUBLIC_WS_URL
+
 RUN npm run build -w packages/auth \
- && npm run build -w apps/storefront \
- && echo "build_ts=$(date +%s)" > /tmp/.build-marker
+ && npm run build -w apps/storefront
 
 FROM node:20-alpine AS runner
 WORKDIR /app
