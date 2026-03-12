@@ -11,7 +11,10 @@ COPY tsconfig.base.json ./
 COPY packages/auth/ ./packages/auth/
 COPY apps/storefront/ ./apps/storefront/
 
-RUN npm run build -w packages/auth && npm run build -w apps/storefront
+# Build packages (no layer caching — source changes must trigger rebuild)
+RUN npm run build -w packages/auth \
+ && npm run build -w apps/storefront \
+ && echo "build_ts=$(date +%s)" > /tmp/.build-marker
 
 FROM node:20-alpine AS runner
 WORKDIR /app
