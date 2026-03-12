@@ -18,7 +18,7 @@ ARG NEXT_PUBLIC_MANAGER_URL
 ARG NEXT_PUBLIC_WS_URL
 
 # Cache buster — change this value to force a fresh build layer
-ARG CACHEBUST=9
+ARG CACHEBUST=10
 
 RUN npm run build -w packages/auth \
  && npm run build -w apps/storefront
