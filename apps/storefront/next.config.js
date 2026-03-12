@@ -15,6 +15,12 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.digitaloceanspaces.com' },
       { protocol: 'https', hostname: '**.gadnuc.com' },
     ],
+    // WordPress-style thumbnail sizes for product images
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes:  [128, 256, 384, 512, 640],
+    formats:     ['image/webp'],
+    // Keep served images reasonable — no giant originals
+    minimumCacheTTL: 60 * 60 * 24, // 24h CDN cache
   },
 
   // Security headers

@@ -51,7 +51,8 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
               width={36}
               height={36}
               className="object-contain rounded"
-              unoptimized
+              sizes="36px"
+              quality={90}
             />
           )}
           <span className="text-lg font-bold tracking-tight">{storeName}</span>

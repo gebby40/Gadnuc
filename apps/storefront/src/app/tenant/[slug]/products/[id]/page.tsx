@@ -60,6 +60,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
             aspectRatio: '1',
             background:   'var(--color-bg-secondary)',
             border:       '1px solid var(--color-border)',
+            maxWidth:     '600px',
+            maxHeight:    '600px',
           }}
         >
           {product.image_url ? (
@@ -67,8 +69,9 @@ export default async function ProductDetailPage({ params }: PageProps) {
               src={product.image_url}
               alt={product.name}
               fill
+              sizes="(max-width: 768px) 100vw, 600px"
               className="object-cover"
-              unoptimized
+              quality={85}
               priority
             />
           ) : (
