@@ -1,16 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN ?? 'gadnuc.io';
-
 /**
- * Next.js Edge Middleware — resolves tenant from subdomain or custom domain
- * and rewrites requests to the appropriate tenant route.
+ * Next.js Edge Middleware — path-based tenant routing.
  *
- * acme.gadnuc.io/products → /tenants/acme/products (internally)
+ * Tenant stores live at gadnuc.com/tenant/{slug}/...
+ * The middleware sets x-tenant-slug and x-original-host headers
+ * for server components to use when calling backend APIs.
  */
 export function middleware(request: NextRequest) {
-  const host = request.headers.get('host') ?? '';
-  const hostname = host.split(':')[0].toLowerCase();
   const pathname = request.nextUrl.pathname;
 
   // Skip internal Next.js paths
@@ -23,29 +20,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Extract tenant slug from subdomain
-  let tenantSlug: string | null = null;
+  // Extract tenant slug from /tenant/{slug}/... paths
+  const tenantMatch = pathname.match(/^\/tenant\/([a-z0-9_]+)(\/|$)/);
 
-  if (hostname.endsWith(`.${PLATFORM_DOMAIN}`)) {
-    tenantSlug = hostname.slice(0, hostname.length - PLATFORM_DOMAIN.length - 1);
-  } else if (!hostname.includes(PLATFORM_DOMAIN)) {
-    // Custom domain — pass through; server component will do the lookup
-    tenantSlug = 'custom';
+  if (tenantMatch) {
+    const tenantSlug = tenantMatch[1];
+    const host = request.headers.get('host') ?? '';
+
+    // Set tenant headers for server components
+    const response = NextResponse.next();
+    response.headers.set('x-tenant-slug', tenantSlug);
+    response.headers.set('x-original-host', host.split(':')[0]);
+    return response;
   }
 
-  if (!tenantSlug) {
-    // Root platform domain — redirect to marketing page
-    return NextResponse.next();
-  }
-
-  // Rewrite to tenant-scoped route with slug in header
-  const response = NextResponse.rewrite(
-    new URL(`/tenant/${tenantSlug}${pathname}`, request.url)
-  );
-  response.headers.set('x-tenant-slug', tenantSlug);
-  response.headers.set('x-original-host', hostname);
-
-  return response;
+  // All other paths (/, /login, /platform-admin, etc.) are platform routes
+  return NextResponse.next();
 }
 
 export const config = {

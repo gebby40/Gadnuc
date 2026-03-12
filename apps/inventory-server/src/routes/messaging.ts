@@ -17,7 +17,7 @@
  *   POST   /api/messaging/support                — anonymous start/resume support room
  */
 
-import { Router }            from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z }                 from 'zod';
 import { requireAuth }       from '@gadnuc/auth';
 import { withTenantSchema }  from '@gadnuc/db';
@@ -27,11 +27,11 @@ export const messagingRouter = Router();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function tenantSlug(req: any): string {
-  return req.tenant?.slug ?? req.user?.tenantSlug;
+function tenantSlug(req: Request): string {
+  return (req.tenant?.slug ?? req.user?.tenantSlug)!;
 }
 
-function userId(req: any): string {
+function userId(req: Request): string {
   return req.user!.userId;
 }
 
@@ -63,9 +63,9 @@ const supportSchema = z.object({
 
 // ── GET /api/messaging/rooms ──────────────────────────────────────────────────
 
-messagingRouter.get('/rooms', requireAuth, async (req: any, res) => {
+messagingRouter.get('/rooms', requireAuth, async (req: Request, res: Response) => {
   try {
-    const rooms = await withTenantSchema(tenantSlug(req), async (db: any) => {
+    const rooms = await withTenantSchema(tenantSlug(req), async (db) => {
       const { rows } = await db.query(
         `SELECT r.id, r.name, r.topic, r.room_type, r.is_public,
                 r.created_at, r.updated_at, mm.role, mm.last_read_at,
@@ -90,7 +90,7 @@ messagingRouter.get('/rooms', requireAuth, async (req: any, res) => {
 
 // ── POST /api/messaging/rooms ─────────────────────────────────────────────────
 
-messagingRouter.post('/rooms', requireAuth, async (req: any, res) => {
+messagingRouter.post('/rooms', requireAuth, async (req: Request, res: Response) => {
   const parse = createRoomSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
@@ -102,7 +102,7 @@ messagingRouter.post('/rooms', requireAuth, async (req: any, res) => {
   const uid  = userId(req);
 
   try {
-    const room = await withTenantSchema(slug, async (db: any) => {
+    const room = await withTenantSchema(slug, async (db) => {
       // Create room
       const { rows: [r] } = await db.query(
         `INSERT INTO messaging_rooms (name, topic, room_type, is_public, created_by)
@@ -147,9 +147,9 @@ messagingRouter.post('/rooms', requireAuth, async (req: any, res) => {
 
 // ── GET /api/messaging/rooms/:id ──────────────────────────────────────────────
 
-messagingRouter.get('/rooms/:id', requireAuth, async (req: any, res) => {
+messagingRouter.get('/rooms/:id', requireAuth, async (req: Request, res: Response) => {
   try {
-    const room = await withTenantSchema(tenantSlug(req), async (db: any) => {
+    const room = await withTenantSchema(tenantSlug(req), async (db) => {
       const { rows } = await db.query(
         `SELECT r.*, mm.role, mm.last_read_at
          FROM messaging_rooms r
@@ -169,16 +169,16 @@ messagingRouter.get('/rooms/:id', requireAuth, async (req: any, res) => {
 
 // ── DELETE /api/messaging/rooms/:id ──────────────────────────────────────────
 
-messagingRouter.delete('/rooms/:id', requireAuth, async (req: any, res) => {
+messagingRouter.delete('/rooms/:id', requireAuth, async (req: Request, res: Response) => {
   try {
-    await withTenantSchema(tenantSlug(req), async (db: any) => {
+    await withTenantSchema(tenantSlug(req), async (db) => {
       // Only owner or admin can delete
       const { rows: [membership] } = await db.query(
         `SELECT role FROM messaging_members WHERE room_id = $1 AND user_id = $2`,
         [req.params.id, userId(req)],
       );
       if (!membership) throw Object.assign(new Error('Not a member'), { status: 404 });
-      if (membership.role !== 'owner' && (req as any).user?.role !== 'admin') {
+      if (membership.role !== 'owner' && req.user?.role !== 'admin') {
         throw Object.assign(new Error('Only the room owner can delete it'), { status: 403 });
       }
       await db.query(`DELETE FROM messaging_rooms WHERE id = $1`, [req.params.id]);
@@ -191,12 +191,12 @@ messagingRouter.delete('/rooms/:id', requireAuth, async (req: any, res) => {
 
 // ── GET /api/messaging/rooms/:id/messages ─────────────────────────────────────
 
-messagingRouter.get('/rooms/:id/messages', requireAuth, async (req: any, res) => {
+messagingRouter.get('/rooms/:id/messages', requireAuth, async (req: Request, res: Response) => {
   const limit  = Math.min(parseInt(String(req.query.limit  ?? 50), 10), 200);
   const before = req.query.before as string | undefined; // cursor: ISO timestamp
 
   try {
-    const messages = await withTenantSchema(tenantSlug(req), async (db: any) => {
+    const messages = await withTenantSchema(tenantSlug(req), async (db) => {
       // Verify membership
       const { rows: [m] } = await db.query(
         `SELECT 1 FROM messaging_members WHERE room_id = $1 AND user_id = $2`,
@@ -226,7 +226,7 @@ messagingRouter.get('/rooms/:id/messages', requireAuth, async (req: any, res) =>
 // ── POST /api/messaging/rooms/:id/messages ────────────────────────────────────
 // REST fallback for send_message (socket path is preferred)
 
-messagingRouter.post('/rooms/:id/messages', requireAuth, async (req: any, res) => {
+messagingRouter.post('/rooms/:id/messages', requireAuth, async (req: Request, res: Response) => {
   const parse = sendMessageSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
@@ -238,7 +238,7 @@ messagingRouter.post('/rooms/:id/messages', requireAuth, async (req: any, res) =
   const uid  = userId(req);
 
   try {
-    const event = await withTenantSchema(slug, async (db: any) => {
+    const event = await withTenantSchema(slug, async (db) => {
       const { rows: [m] } = await db.query(
         `SELECT 1 FROM messaging_members WHERE room_id = $1 AND user_id = $2`,
         [req.params.id, uid],
@@ -281,7 +281,7 @@ messagingRouter.post('/rooms/:id/messages', requireAuth, async (req: any, res) =
 
 // ── POST /api/messaging/rooms/:id/invite ─────────────────────────────────────
 
-messagingRouter.post('/rooms/:id/invite', requireAuth, async (req: any, res) => {
+messagingRouter.post('/rooms/:id/invite', requireAuth, async (req: Request, res: Response) => {
   const parse = inviteSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
@@ -289,7 +289,7 @@ messagingRouter.post('/rooms/:id/invite', requireAuth, async (req: any, res) => 
   }
 
   try {
-    await withTenantSchema(tenantSlug(req), async (db: any) => {
+    await withTenantSchema(tenantSlug(req), async (db) => {
       // Inviter must be owner or moderator
       const { rows: [self] } = await db.query(
         `SELECT role FROM messaging_members WHERE room_id = $1 AND user_id = $2`,
@@ -323,9 +323,9 @@ messagingRouter.post('/rooms/:id/invite', requireAuth, async (req: any, res) => 
 
 // ── POST /api/messaging/rooms/:id/leave ──────────────────────────────────────
 
-messagingRouter.post('/rooms/:id/leave', requireAuth, async (req: any, res) => {
+messagingRouter.post('/rooms/:id/leave', requireAuth, async (req: Request, res: Response) => {
   try {
-    await withTenantSchema(tenantSlug(req), async (db: any) => {
+    await withTenantSchema(tenantSlug(req), async (db) => {
       const { rowCount } = await db.query(
         `DELETE FROM messaging_members WHERE room_id = $1 AND user_id = $2`,
         [req.params.id, userId(req)],
@@ -347,9 +347,9 @@ messagingRouter.post('/rooms/:id/leave', requireAuth, async (req: any, res) => {
 
 // ── PUT /api/messaging/rooms/:id/read ────────────────────────────────────────
 
-messagingRouter.put('/rooms/:id/read', requireAuth, async (req: any, res) => {
+messagingRouter.put('/rooms/:id/read', requireAuth, async (req: Request, res: Response) => {
   try {
-    await withTenantSchema(tenantSlug(req), async (db: any) => {
+    await withTenantSchema(tenantSlug(req), async (db) => {
       await db.query(
         `UPDATE messaging_members SET last_read_at = now()
          WHERE room_id = $1 AND user_id = $2`,
@@ -364,13 +364,13 @@ messagingRouter.put('/rooms/:id/read', requireAuth, async (req: any, res) => {
 
 // ── DELETE /api/messaging/rooms/:id/messages/:msgId — redact ─────────────────
 
-messagingRouter.delete('/rooms/:id/messages/:msgId', requireAuth, async (req: any, res) => {
+messagingRouter.delete('/rooms/:id/messages/:msgId', requireAuth, async (req: Request, res: Response) => {
   const slug = tenantSlug(req);
   const uid  = userId(req);
-  const role = (req as any).user?.role;
+  const role = req.user?.role;
 
   try {
-    await withTenantSchema(slug, async (db: any) => {
+    await withTenantSchema(slug, async (db) => {
       const { rows: [evt] } = await db.query(
         `SELECT sender_id FROM messaging_events WHERE id = $1 AND room_id = $2`,
         [req.params.msgId, req.params.id],
@@ -408,7 +408,7 @@ messagingRouter.delete('/rooms/:id/messages/:msgId', requireAuth, async (req: an
 // ── POST /api/messaging/support — anonymous customer starts support chat ──────
 // No requireAuth — anonymous callers allowed.
 
-messagingRouter.post('/support', async (req: any, res) => {
+messagingRouter.post('/support', async (req: Request, res: Response) => {
   const parse = supportSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
@@ -422,7 +422,7 @@ messagingRouter.post('/support', async (req: any, res) => {
   if (!slug) { res.status(400).json({ error: 'Tenant slug required' }); return; }
 
   try {
-    const result = await withTenantSchema(slug, async (db: any) => {
+    const result = await withTenantSchema(slug, async (db) => {
       // Create a new support room
       const { rows: [room] } = await db.query(
         `INSERT INTO messaging_rooms (name, topic, room_type, is_public)

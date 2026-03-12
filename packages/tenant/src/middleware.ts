@@ -33,7 +33,7 @@ export async function tenantMiddleware(
   }
 
   const overrideSlug    = req.headers['x-tenant-slug'];
-  const platformDomain  = process.env.PLATFORM_DOMAIN ?? 'gadnuc.io';
+  const platformDomain  = process.env.PLATFORM_DOMAIN ?? 'gadnuc.com';
   const host = (typeof overrideSlug === 'string' ? `${overrideSlug}.${platformDomain}` : null)
     ?? req.headers.host
     ?? '';

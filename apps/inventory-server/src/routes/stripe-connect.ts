@@ -30,7 +30,7 @@ stripeConnectRouter.get(
   requireAuth,
   requireRole('tenant_admin'),
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+    const tenant = req.tenant;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const clientId    = process.env.STRIPE_CONNECT_CLIENT_ID;
@@ -77,7 +77,7 @@ stripeConnectRouter.get(
   requireAuth,
   requireRole('tenant_admin'),
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+    const tenant = req.tenant;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const { code, state, error: oauthError } = req.query as Record<string, string>;
@@ -139,7 +139,7 @@ stripeConnectRouter.get(
   requireAuth,
   requireRole('tenant_admin'),
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+    const tenant = req.tenant;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     try {
@@ -180,7 +180,7 @@ stripeConnectRouter.post(
   requireAuth,
   requireRole('tenant_admin'),
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+    const tenant = req.tenant;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const pool = getPool();

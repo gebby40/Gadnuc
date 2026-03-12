@@ -78,11 +78,11 @@ metadata:
 spec:
   tls:
     - hosts:
-        - "*.gadnuc.io"
-        - gadnuc.io
+        - "*.gadnuc.com"
+        - gadnuc.com
       secretName: gadnuc-tls
   rules:
-    - host: "*.gadnuc.io"
+    - host: "*.gadnuc.com"
       http:
         paths:
           - path: /

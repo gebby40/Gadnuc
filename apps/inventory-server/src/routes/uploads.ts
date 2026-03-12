@@ -49,7 +49,7 @@ uploadsRouter.post(
   '/presign',
   requireAuth,
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+    const tenant = req.tenant;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const parsed = presignSchema.safeParse(req.body);
@@ -83,10 +83,10 @@ uploadsRouter.post(
         ACL:           'public-read',
         Metadata:      { 'x-tenant-slug': tenant.slug },
       });
-      const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 300 });
+      const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 900 });
 
       // Record the upload intent in DB (finalized when client confirms PUT succeeded)
-      const userId = (req as any).user?.id ?? null;
+      const userId = req.user?.userId ?? null;
       await withTenantSchema(tenant.slug, async (db: any) => {
         await db.query(
           `INSERT INTO media_uploads (key, url, filename, mime_type, size_bytes, uploaded_by)
@@ -100,7 +100,7 @@ uploadsRouter.post(
         uploadUrl,
         publicUrl,
         key: objectKey,
-        expiresIn: 300,
+        expiresIn: 900,
       });
     } catch (err) {
       console.error('[uploads] presign error:', err);

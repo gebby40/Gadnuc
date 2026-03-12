@@ -80,7 +80,7 @@ export function StorefrontFooter({ storeName, contactEmail, contactPhone, social
         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
       >
         © {new Date().getFullYear()} {storeName}. Powered by{' '}
-        <a href="https://gadnuc.io" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+        <a href="https://gadnuc.com" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
           Gadnuc
         </a>.
       </div>

@@ -18,6 +18,7 @@ export function createPool(config?: PoolConfig): Pool {
     max:                     20,
     idleTimeoutMillis:  30_000,
     connectionTimeoutMillis: 5_000,
+    statement_timeout:      30_000, // 30s — prevents runaway queries from holding connections
     ssl: sslConfig(),
     ...config,
   });
@@ -47,6 +48,7 @@ export function createReadPool(config?: PoolConfig): Pool {
     max:                     10,
     idleTimeoutMillis:  30_000,
     connectionTimeoutMillis: 5_000,
+    statement_timeout:      30_000,
     ssl: sslConfig(),
     ...config,
   });

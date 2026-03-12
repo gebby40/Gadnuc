@@ -74,7 +74,7 @@ resource "digitalocean_spaces_bucket" "media" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "HEAD"]
-    allowed_origins = ["https://*.gadnuc.io"]
+    allowed_origins = ["https://*.gadnuc.com"]
     max_age_seconds = 3600
   }
 }

@@ -97,7 +97,7 @@ jobs:
     if: always() && !cancelled() && !failure()
     environment:
       name: production
-      url: https://gadnuc.io
+      url: https://gadnuc.com
     steps:
       - uses: actions/checkout@v4
 
@@ -124,7 +124,7 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          curl -f https://gadnuc.io/health || exit 1
+          curl -f https://gadnuc.com/health || exit 1
           echo "Smoke test passed"
 
   notify:

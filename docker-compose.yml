@@ -58,7 +58,7 @@ services:
       STRIPE_CONNECT_CLIENT_ID:    ${STRIPE_CONNECT_CLIENT_ID}
       STRIPE_CONNECT_REDIRECT_URI: ${STRIPE_CONNECT_REDIRECT_URI}
       PLATFORM_FEE_PCT:            ${PLATFORM_FEE_PCT:-5}
-      PLATFORM_DOMAIN:             ${PLATFORM_DOMAIN:-gadnuc.io}
+      PLATFORM_DOMAIN:             ${PLATFORM_DOMAIN:-gadnuc.com}
       ALLOWED_ORIGINS:             ${ALLOWED_ORIGINS}
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
@@ -109,7 +109,7 @@ services:
       - '3000:3000'
     environment:
       NODE_ENV:                    production
-      PLATFORM_DOMAIN:             ${PLATFORM_DOMAIN:-gadnuc.io}
+      PLATFORM_DOMAIN:             ${PLATFORM_DOMAIN:-gadnuc.com}
       INVENTORY_SERVER_URL:        http://inventory-server:3001
       MANAGER_SERVER_URL:          http://server-manager:3002
       NEXT_PUBLIC_INVENTORY_URL:   ${NEXT_PUBLIC_INVENTORY_URL:-http://localhost:3001}

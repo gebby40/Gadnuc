@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '@gadnuc/auth';
 import { withTenantSchema } from '@gadnuc/db';
+import { emitWebhookEvent } from '../services/webhooks.js';
+import { logAuditEvent } from '../middleware/audit.js';
 
 export const productsRouter = Router();
 
@@ -20,6 +22,11 @@ const productSchema = z.object({
   is_active:   z.boolean().default(true),
   metadata:    z.record(z.unknown()).default({}),
 });
+
+const UPDATABLE_PRODUCT_FIELDS = new Set([
+  'sku', 'name', 'description', 'category', 'price_cents', 'stock_qty',
+  'low_stock_threshold', 'image_url', 'is_active', 'metadata',
+]);
 
 // GET /api/products — list all products for this tenant
 productsRouter.get('/', async (req, res) => {
@@ -95,6 +102,12 @@ productsRouter.post('/', requireRole('operator'), async (req, res) => {
          d.image_url ?? null, d.is_active, JSON.stringify(d.metadata)]
       );
       res.status(201).json({ data: rows[0] });
+
+      logAuditEvent({ req, action: 'product.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: rows[0].id, sku: d.sku } });
+
+      emitWebhookEvent(req.user!.tenantId, 'product.created', {
+        product_id: rows[0].id, sku: d.sku, name: d.name,
+      }).catch(() => {});
     });
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') {
@@ -115,7 +128,7 @@ productsRouter.patch('/:id', requireRole('operator'), async (req, res) => {
   }
 
   const updates = parse.data;
-  const fields = Object.keys(updates) as Array<keyof typeof updates>;
+  const fields = (Object.keys(updates) as Array<keyof typeof updates>).filter(f => UPDATABLE_PRODUCT_FIELDS.has(f));
   if (fields.length === 0) {
     res.status(400).json({ error: 'No fields to update' });
     return;
@@ -133,6 +146,12 @@ productsRouter.patch('/:id', requireRole('operator'), async (req, res) => {
       );
       if (!rows[0]) { res.status(404).json({ error: 'Product not found' }); return; }
       res.json({ data: rows[0] });
+
+      logAuditEvent({ req, action: 'product.updated', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: req.params.id } });
+
+      emitWebhookEvent(req.user!.tenantId, 'product.updated', {
+        product_id: req.params.id,
+      }).catch(() => {});
     });
   } catch (err) {
     console.error('[products] Update error:', err);
@@ -150,6 +169,12 @@ productsRouter.delete('/:id', requireRole('tenant_admin'), async (req, res) => {
       );
       if (!rowCount) { res.status(404).json({ error: 'Product not found' }); return; }
       res.status(204).send();
+
+      logAuditEvent({ req, action: 'product.deleted', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: req.params.id } });
+
+      emitWebhookEvent(req.user!.tenantId, 'product.deleted', {
+        product_id: req.params.id,
+      }).catch(() => {});
     });
   } catch (err) {
     console.error('[products] Delete error:', err);

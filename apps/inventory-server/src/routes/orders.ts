@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '@gadnuc/auth';
 import { withTenantSchema } from '@gadnuc/db';
+import { emitWebhookEvent } from '../services/webhooks.js';
+import { logAuditEvent } from '../middleware/audit.js';
 
 export const ordersRouter = Router();
 ordersRouter.use(requireAuth);
@@ -121,6 +123,12 @@ ordersRouter.post('/', requireRole('operator'), async (req, res) => {
       }
 
       res.status(201).json({ data: { ...order, items } });
+
+      logAuditEvent({ req, action: 'order.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { order_id: order.id, order_number: orderNumber } });
+
+      emitWebhookEvent(req.user!.tenantId, 'order.created', {
+        order_id: order.id, order_number: orderNumber, total_cents: totalCents,
+      }).catch(() => {});
     });
   } catch (err) {
     console.error('[orders] Create error:', err);
@@ -154,6 +162,16 @@ ordersRouter.patch('/:id/status', requireRole('operator'), async (req, res) => {
         [req.params.id, status]
       );
       res.json({ data: updated });
+
+      logAuditEvent({ req, action: 'order.status_changed', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { order_id: req.params.id, old_status: order.status, new_status: status } });
+
+      const webhookEvent = status === 'shipped' ? 'order.shipped'
+        : status === 'cancelled' ? 'order.cancelled'
+        : status === 'refunded' ? 'order.refunded'
+        : 'order.updated';
+      emitWebhookEvent(req.user!.tenantId, webhookEvent, {
+        order_id: req.params.id, old_status: order.status, new_status: status,
+      }).catch(() => {});
     });
   } catch (err) {
     console.error('[orders] Status update error:', err);

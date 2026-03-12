@@ -14,6 +14,9 @@ const MIGRATION_FILES = [
   '005_storefront_analytics.sql',
   '006_messaging.sql',
   '007_stripe_connect.sql',
+  '008_webhooks.sql',
+  '009_api_keys.sql',
+  '010_platform_admins.sql',
 ];
 
 export async function runMigrations(pool?: Pool): Promise<void> {

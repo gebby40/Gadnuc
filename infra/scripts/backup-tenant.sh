@@ -94,7 +94,7 @@ backup_slug() {
 
   # Optional GPG encryption
   local upload_path="${filepath}"
-  if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; do
+  if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
     require_cmd gpg
     gpg --batch --yes \
         --passphrase "${BACKUP_PASSPHRASE}" \

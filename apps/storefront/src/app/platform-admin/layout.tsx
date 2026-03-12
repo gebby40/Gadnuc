@@ -1,16 +1,40 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useAuth } from '../../components/AuthProvider';
+import { platformLogout } from '../../lib/auth';
 
 const navItems = [
-  { href: '/platform-admin',         label: '📊 Overview' },
-  { href: '/platform-admin/tenants', label: '🏢 Tenants' },
-  { href: '/platform-admin/flags',   label: '🚩 Feature Flags' },
+  { href: '/platform-admin',         label: 'Overview' },
+  { href: '/platform-admin/tenants', label: 'Tenants' },
+  { href: '/platform-admin/flags',   label: 'Feature Flags' },
 ];
 
 export default function PlatformAdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router   = useRouter();
+  const { user, isLoading, logout } = useAuth();
+
+  // Auth guard — redirect to /login if not super_admin
+  useEffect(() => {
+    if (!isLoading && (!user || user.role !== 'super_admin')) {
+      router.push('/login');
+    }
+  }, [isLoading, user, router]);
+
+  if (isLoading) {
+    return <div style={{ padding: '2rem', color: '#64748b' }}>Loading...</div>;
+  }
+
+  if (!user || user.role !== 'super_admin') return null;
+
+  async function handleLogout() {
+    await platformLogout();
+    logout();
+    router.push('/login');
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
@@ -46,10 +70,16 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
           })}
         </nav>
 
-        <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid #1e293b' }}>
+        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <Link href="/" style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.75rem' }}>
-            ← Back to platform
+            ← Back to homepage
           </Link>
+          <button onClick={handleLogout} style={{
+            background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem',
+            cursor: 'pointer', padding: 0, textAlign: 'left',
+          }}>
+            Sign out
+          </button>
         </div>
       </aside>
 

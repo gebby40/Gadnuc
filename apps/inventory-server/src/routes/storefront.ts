@@ -18,7 +18,8 @@ import { z }      from 'zod';
 import Stripe     from 'stripe';
 import { withTenantSchema, getPool } from '@gadnuc/db';
 import { requireAuth, requireRole } from '@gadnuc/auth';
-import { sendOrderConfirmation }    from '../services/email.js';
+import { sendOrderConfirmation }    from '../services/nodemailer.js';
+import { emitWebhookEvent }         from '../services/webhooks.js';
 import { stripeCheckoutSessions }   from '../metrics.js';
 import type { Request, Response }  from 'express';
 
@@ -35,11 +36,11 @@ function getStripe(): Stripe {
 
 // ── GET /api/storefront/settings ─────────────────────────────────────────────
 storefrontRouter.get('/settings', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
-    const row = await withTenantSchema(tenant.slug, async (db: any) => {
+    const row = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query('SELECT * FROM storefront_settings LIMIT 1');
       return rows[0] ?? null;
     });
@@ -74,7 +75,7 @@ storefrontRouter.patch(
   requireAuth,
   requireRole('tenant_admin'),
   async (req: Request, res: Response) => {
-    const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+    const tenant = req.tenant;
     if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
     const parsed = patchSettingsSchema.safeParse(req.body);
@@ -90,7 +91,7 @@ storefrontRouter.patch(
 
     const keys      = Object.keys(updates) as (keyof typeof updates)[];
     const setClauses = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
-    const values     = keys.map((k) => (updates as any)[k]);
+    const values     = keys.map((k) => updates[k]);
     const sql = `
       INSERT INTO storefront_settings (${keys.map((k) => `"${k}"`).join(', ')})
       VALUES (${keys.map((_, i) => `$${i + 1}`).join(', ')})
@@ -100,7 +101,7 @@ storefrontRouter.patch(
     `;
 
     try {
-      const row = await withTenantSchema(tenant.slug, async (db: any) => {
+      const row = await withTenantSchema(tenant.slug, async (db) => {
         const { rows } = await db.query(sql, values);
         return rows[0];
       });
@@ -114,7 +115,7 @@ storefrontRouter.patch(
 
 // ── GET /api/storefront/products ─────────────────────────────────────────────
 storefrontRouter.get('/products', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const { category, search, page = '1', limit = '24' } = req.query as Record<string, string>;
@@ -123,7 +124,7 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
   const offset   = (pageNum - 1) * limitNum;
 
   try {
-    const { rows, total } = await withTenantSchema(tenant.slug, async (db: any) => {
+    const { rows, total } = await withTenantSchema(tenant.slug, async (db) => {
       const conditions: string[] = ['is_active = true'];
       const params: unknown[] = [];
 
@@ -177,11 +178,11 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
 
 // ── GET /api/storefront/products/:id ─────────────────────────────────────────
 storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
-    const row = await withTenantSchema(tenant.slug, async (db: any) => {
+    const row = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query(
         `SELECT id, sku, name, description, category, price_cents, stock_qty,
                 low_stock_threshold, image_url, metadata
@@ -202,15 +203,15 @@ storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
 
 // ── GET /api/storefront/categories ───────────────────────────────────────────
 storefrontRouter.get('/categories', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
-    const rows = await withTenantSchema(tenant.slug, async (db: any) => {
+    const rows = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query(
         `SELECT DISTINCT category FROM products WHERE is_active = true AND category IS NOT NULL ORDER BY category`,
       );
-      return rows.map((r: any) => r.category as string);
+      return rows.map((r: Record<string, unknown>) => r.category as string);
     });
     res.json({ data: rows });
   } catch (err) {
@@ -231,7 +232,7 @@ const checkoutSchema = z.object({
 });
 
 storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const parsed = checkoutSchema.safeParse(req.body);
@@ -247,7 +248,7 @@ storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
   try {
     // 1. Fetch product details from DB to get authoritative prices
     const productIds = items.map((i) => i.productId);
-    const products: ProdRow[] = await withTenantSchema(tenant.slug, async (db: any) => {
+    const products: ProdRow[] = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query(
         `SELECT id, name, price_cents, stock_qty, image_url, is_active
          FROM products WHERE id = ANY($1::uuid[])`,
@@ -385,7 +386,7 @@ export async function handleStripeWebhook(req: Request, res: Response) {
 
     // Fetch authoritative product data & build order — wrapped in a transaction
     // so stock decrements and order creation are atomic (idempotent on replay).
-    await withTenantSchema(tenantSlug, async (db: any) => {
+    await withTenantSchema(tenantSlug, async (db) => {
       await db.query('BEGIN');
       try {
       const productIds = items.map((i) => i.productId);
@@ -456,6 +457,19 @@ export async function handleStripeWebhook(req: Request, res: Response) {
         }).catch((err) => console.error('[webhook] Email send failed:', err));
       }
 
+      // Fire-and-forget webhook for storefront order
+      getPool().query('SELECT id FROM public.tenants WHERE slug = $1', [tenantSlug])
+        .then(({ rows }) => {
+          if (rows[0]) {
+            emitWebhookEvent(rows[0].id as string, 'order.created', {
+              order_number: orderNumber,
+              total_cents: totalCents,
+              source: 'storefront',
+            });
+          }
+        })
+        .catch((err: unknown) => console.error('[webhook] Storefront order webhook failed:', err));
+
       return orderRows[0];
       } catch (txErr) {
         await db.query('ROLLBACK').catch(() => {/* ignore rollback error */});
@@ -473,11 +487,11 @@ export async function handleStripeWebhook(req: Request, res: Response) {
 
 // ── GET /api/storefront/orders/:orderNumber ──────────────────────────────────
 storefrontRouter.get('/orders/:orderNumber', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   try {
-    const result = await withTenantSchema(tenant.slug, async (db: any) => {
+    const result = await withTenantSchema(tenant.slug, async (db) => {
       const { rows: orderRows } = await db.query(
         `SELECT id, order_number, customer_name, customer_email, status,
                 total_cents, shipping_address, created_at, updated_at
@@ -487,14 +501,14 @@ storefrontRouter.get('/orders/:orderNumber', async (req: Request, res: Response)
       );
       if (!orderRows[0]) return null;
 
-      const order = orderRows[0] as any;
+      const order = orderRows[0];
       const { rows: itemRows } = await db.query(
         `SELECT oi.sku, oi.name, oi.quantity, oi.unit_price_cents,
                 p.image_url, p.id AS product_id
          FROM order_items oi
          LEFT JOIN products p ON p.id = oi.product_id
          WHERE oi.order_id = $1`,
-        [order.id],
+        [(order as Record<string, unknown>).id],
       );
       return { ...order, items: itemRows };
     });
@@ -518,7 +532,7 @@ const analyticsSchema = z.object({
 });
 
 storefrontRouter.post('/analytics', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+  const tenant = req.tenant;
   if (!tenant) { res.status(204).end(); return; }
 
   const parsed = analyticsSchema.safeParse(req.body);
@@ -535,7 +549,7 @@ storefrontRouter.post('/analytics', async (req: Request, res: Response) => {
   const crypto = await import('node:crypto');
   const ipHash = crypto.createHash('sha256').update(ip).digest('hex');
 
-  withTenantSchema(tenant.slug, async (db: any) => {
+  withTenantSchema(tenant.slug, async (db) => {
     await db.query(
       `INSERT INTO storefront_analytics
          (event_type, page_path, product_id, session_id, user_agent, ip_hash, referrer, metadata)

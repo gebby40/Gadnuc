@@ -13,7 +13,7 @@ const nextConfig = {
     // Allow images from DigitalOcean Spaces and tenant custom domains
     remotePatterns: [
       { protocol: 'https', hostname: '**.digitaloceanspaces.com' },
-      { protocol: 'https', hostname: '**.gadnuc.io' },
+      { protocol: 'https', hostname: '**.gadnuc.com' },
     ],
   },
 

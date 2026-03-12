@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole, hashPassword } from '@gadnuc/auth';
 import { withTenantSchema } from '@gadnuc/db';
+import { emitWebhookEvent } from '../services/webhooks.js';
+import { sendWelcomeEmail } from '../services/nodemailer.js';
+import { logAuditEvent } from '../middleware/audit.js';
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
@@ -21,6 +24,10 @@ const updateUserSchema = createUserSchema
     password:  z.string().min(8).max(256).optional(),
     is_active: z.boolean().optional(),
   });
+
+const UPDATABLE_USER_FIELDS = new Set([
+  'username', 'email', 'display_name', 'role', 'password_hash', 'is_active',
+]);
 
 // GET /api/users — list users (tenant_admin+)
 usersRouter.get('/', requireRole('tenant_admin'), async (req, res) => {
@@ -76,6 +83,19 @@ usersRouter.post('/', requireRole('tenant_admin'), async (req, res) => {
          rest.display_name ?? null, rest.role, password_hash]
       );
       res.status(201).json({ data: rows[0] });
+
+      logAuditEvent({ req, action: 'user.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { new_user_id: rows[0].id, username: rest.username } });
+
+      emitWebhookEvent(req.user!.tenantId, 'user.created', {
+        user_id: rows[0].id, username: rest.username, email: rest.email, role: rest.role,
+      }).catch(() => {});
+
+      sendWelcomeEmail({
+        to: rest.email,
+        displayName: rest.display_name ?? rest.username,
+        tenantSlug: req.tenantSlug!,
+        loginUrl: `${process.env.NEXT_PUBLIC_MANAGER_URL ?? 'http://localhost:3002'}/login`,
+      }).catch((err) => console.error('[users] Welcome email failed:', err));
     });
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') {
@@ -101,7 +121,7 @@ usersRouter.patch('/:id', requireRole('tenant_admin'), async (req, res) => {
     delete updates.password;
   }
 
-  const fields = Object.keys(updates);
+  const fields = Object.keys(updates).filter(f => UPDATABLE_USER_FIELDS.has(f));
   if (!fields.length) { res.status(400).json({ error: 'No fields to update' }); return; }
 
   const setClauses = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
@@ -114,6 +134,12 @@ usersRouter.patch('/:id', requireRole('tenant_admin'), async (req, res) => {
       );
       if (!rows[0]) { res.status(404).json({ error: 'User not found' }); return; }
       res.json({ data: rows[0] });
+
+      logAuditEvent({ req, action: 'user.updated', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { target_user_id: req.params.id } });
+
+      emitWebhookEvent(req.user!.tenantId, 'user.updated', {
+        user_id: req.params.id,
+      }).catch(() => {});
     });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });

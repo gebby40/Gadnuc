@@ -11,9 +11,9 @@ variable "region" {
 }
 
 variable "platform_domain" {
-  description = "Platform root domain (e.g. gadnuc.io)"
+  description = "Platform root domain (e.g. gadnuc.com)"
   type        = string
-  default     = "gadnuc.io"
+  default     = "gadnuc.com"
 }
 
 variable "db_size" {

@@ -12,10 +12,9 @@
 
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { withTenantSchema, getPool } from '@gadnuc/db';
+import { withTenantSchema } from '@gadnuc/db';
 import {
   signAccessToken,
-  signRefreshToken,
   requireAuth,
   verifyPassword,
   generateTotpSecret,
@@ -36,6 +35,8 @@ import {
   deleteMfaSession,
 } from '../services/mfa-session.js';
 import { logAuditEvent } from '../middleware/audit.js';
+import { authRateLimit, mfaRateLimit } from '../middleware/tenant-rate-limit.js';
+import { asyncHandler } from '../middleware/error-handler.js';
 
 export const authRouter = Router();
 
@@ -49,6 +50,7 @@ const REFRESH_COOKIE_OPTS = {
   secure:   process.env.NODE_ENV === 'production',
   sameSite: 'strict' as const,
   maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days in ms
+  path:     '/api/auth',
 };
 
 function setRefreshCookie(res: Response, token: string) {
@@ -56,7 +58,7 @@ function setRefreshCookie(res: Response, token: string) {
 }
 
 function clearRefreshCookie(res: Response) {
-  res.clearCookie(REFRESH_COOKIE_NAME, { httpOnly: true, sameSite: 'strict' });
+  res.clearCookie(REFRESH_COOKIE_NAME, { httpOnly: true, sameSite: 'strict', path: '/api/auth' });
 }
 
 async function issueTokenPair(
@@ -81,8 +83,8 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-authRouter.post('/login', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+authRouter.post('/login', authRateLimit(), asyncHandler(async (req: Request, res: Response) => {
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const parsed = loginSchema.safeParse(req.body);
@@ -135,7 +137,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     console.error('[auth] login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/mfa/verify
@@ -146,8 +148,8 @@ const mfaVerifySchema = z.object({
   totp_code: z.string().length(6),
 });
 
-authRouter.post('/mfa/verify', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+authRouter.post('/mfa/verify', mfaRateLimit(), asyncHandler(async (req: Request, res: Response) => {
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const parsed = mfaVerifySchema.safeParse(req.body);
@@ -195,15 +197,15 @@ authRouter.post('/mfa/verify', async (req: Request, res: Response) => {
     console.error('[auth] mfa/verify error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/mfa/setup  — generate secret + QR URI (step 1)
 // ─────────────────────────────────────────────────────────────────────────────
 
-authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
-  const authUser = (req as any).user as { userId: string; tenantId: string; tenantSlug: string };
-  const tenant   = (req as any).tenant as { id: string; slug: string };
+authRouter.post('/mfa/setup', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const authUser = req.user!;
+  const tenant   = req.tenant!;
 
   try {
     const existingSecret = await withTenantSchema(authUser.tenantSlug, async (db) => {
@@ -229,8 +231,8 @@ authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) =
     });
 
     const qrUri = getTotpQrUri(secret, email);
-    // Store pending (unconfirmed) secret in plaintext momentarily in Redis
-    const redis = (await import('@gadnuc/db')).getRedisClient();
+    const { getRedisClient } = await import('@gadnuc/db');
+    const redis = getRedisClient();
     await redis.set(`mfa_pending:${authUser.userId}:${tenant.id}`, secret, 'EX', 10 * 60);
 
     res.json({ secret, qr_uri: qrUri });
@@ -238,7 +240,7 @@ authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) =
     console.error('[auth] mfa/setup error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/mfa/setup/confirm — verify code and activate MFA (step 2)
@@ -246,9 +248,9 @@ authRouter.post('/mfa/setup', requireAuth, async (req: Request, res: Response) =
 
 const setupConfirmSchema = z.object({ totp_code: z.string().length(6) });
 
-authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Response) => {
-  const authUser = (req as any).user as { userId: string; tenantId: string; tenantSlug: string };
-  const tenant   = (req as any).tenant as { id: string; slug: string };
+authRouter.post('/mfa/setup/confirm', requireAuth, mfaRateLimit(), asyncHandler(async (req: Request, res: Response) => {
+  const authUser = req.user!;
+  const tenant   = req.tenant!;
 
   const parsed = setupConfirmSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -257,7 +259,8 @@ authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Res
   }
 
   try {
-    const redis  = (await import('@gadnuc/db')).getRedisClient();
+    const { getRedisClient } = await import('@gadnuc/db');
+    const redis  = getRedisClient();
     const secret = await redis.get(`mfa_pending:${authUser.userId}:${tenant.id}`);
     if (!secret) {
       res.status(400).json({ error: 'No pending MFA setup — call /mfa/setup first' });
@@ -284,7 +287,7 @@ authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Res
     console.error('[auth] mfa/setup/confirm error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/mfa/disable
@@ -292,9 +295,9 @@ authRouter.post('/mfa/setup/confirm', requireAuth, async (req: Request, res: Res
 
 const mfaDisableSchema = z.object({ totp_code: z.string().length(6) });
 
-authRouter.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => {
-  const authUser = (req as any).user as { userId: string; tenantId: string; tenantSlug: string };
-  const tenant   = (req as any).tenant as { id: string; slug: string };
+authRouter.post('/mfa/disable', requireAuth, mfaRateLimit(), asyncHandler(async (req: Request, res: Response) => {
+  const authUser = req.user!;
+  const tenant   = req.tenant!;
 
   const parsed = mfaDisableSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -335,14 +338,14 @@ authRouter.post('/mfa/disable', requireAuth, async (req: Request, res: Response)
     console.error('[auth] mfa/disable error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/refresh
 // ─────────────────────────────────────────────────────────────────────────────
 
-authRouter.post('/refresh', async (req: Request, res: Response) => {
-  const tenant = (req as any).tenant as { id: string; slug: string } | undefined;
+authRouter.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
+  const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
   const incomingToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
@@ -392,21 +395,20 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
   });
   logAuditEvent({ req, action: 'auth.token_refreshed', tenantId: tenant.id, userId: user.id });
   res.json({ access_token: accessToken, token_type: 'Bearer' });
-});
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 
-authRouter.post('/logout', async (req: Request, res: Response) => {
+authRouter.post('/logout', asyncHandler(async (req: Request, res: Response) => {
   const token: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
   if (token) await revokeRefreshToken(token);
   clearRefreshCookie(res);
 
-  const authUser = (req as any).user as { userId?: string; tenantId?: string } | undefined;
-  if (authUser?.userId) {
-    logAuditEvent({ req, action: 'auth.logout', tenantId: authUser.tenantId ?? null, userId: authUser.userId });
+  if (req.user?.userId) {
+    logAuditEvent({ req, action: 'auth.logout', tenantId: req.user.tenantId ?? null, userId: req.user.userId });
   }
 
   res.json({ message: 'Logged out' });
-});
+}));

@@ -28,7 +28,7 @@ export async function resolveTenant(host: string): Promise<TenantContext | null>
   if (cached && cached.expiresAt > Date.now()) return cached.tenant;
 
   const pool           = getPool();
-  const platformDomain = process.env.PLATFORM_DOMAIN ?? 'gadnuc.io';
+  const platformDomain = process.env.PLATFORM_DOMAIN ?? 'gadnuc.com';
 
   let row: TenantContext | null = null;
 
@@ -70,7 +70,7 @@ export async function resolveTenant(host: string): Promise<TenantContext | null>
 
 /** Evict a specific hostname from the resolver cache (e.g., after status change). */
 export function invalidateTenantCache(slug: string): void {
-  const platformDomain = process.env.PLATFORM_DOMAIN ?? 'gadnuc.io';
+  const platformDomain = process.env.PLATFORM_DOMAIN ?? 'gadnuc.com';
   cache.delete(`${slug}.${platformDomain}`);
   // Also evict any custom-domain entries for this slug
   for (const [key, val] of cache.entries()) {

@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { register, metricsMiddleware } from './metrics.js';
 
+import { authRouter }         from './routes/auth.js';
 import { tenantsRouter }      from './routes/tenants.js';
 import { featureFlagsRouter } from './routes/feature-flags.js';
 import { billingRouter }      from './routes/billing.js';
@@ -30,6 +31,9 @@ export function createApp() {
     res.set('Content-Type', register.contentType);
     res.end(await register.metrics());
   });
+
+  // Auth route — no auth middleware required (this IS the login endpoint)
+  app.use('/api/auth',          authRouter);
 
   // All management routes require super_admin role — enforced in each router
   app.use('/api/tenants',       tenantsRouter);
