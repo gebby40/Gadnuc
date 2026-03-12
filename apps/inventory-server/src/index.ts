@@ -50,8 +50,11 @@ async function main() {
         console.error('[inventory-server] Error closing DB pool:', err);
       }
       try {
-        await getRedisClient().quit();
-        console.log('[inventory-server] Redis connection closed');
+        const redis = getRedisClient();
+        if (redis) {
+          await redis.quit();
+          console.log('[inventory-server] Redis connection closed');
+        }
       } catch (err) {
         console.error('[inventory-server] Error closing Redis:', err);
       }

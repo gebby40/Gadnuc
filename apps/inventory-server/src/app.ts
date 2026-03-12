@@ -107,12 +107,17 @@ export function createApp() {
       healthy = false;
     }
 
-    try {
-      await getRedisClient().ping();
-      checks.redis = 'ok';
-    } catch {
-      checks.redis = 'error';
-      healthy = false;
+    const redis = getRedisClient();
+    if (redis) {
+      try {
+        await redis.ping();
+        checks.redis = 'ok';
+      } catch {
+        checks.redis = 'error';
+        healthy = false;
+      }
+    } else {
+      checks.redis = 'disabled';
     }
 
     res.status(healthy ? 200 : 503).json({ status: healthy ? 'ready' : 'degraded', checks });

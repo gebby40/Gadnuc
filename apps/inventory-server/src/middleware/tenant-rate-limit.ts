@@ -55,6 +55,7 @@ export function tenantRateLimit(opts?: {
     try {
       const { getRedisClient } = await import('@gadnuc/db');
       const redis = getRedisClient();
+      if (!redis) throw new Error('Redis not available');
       const count = await redis.incr(key);
       if (count === 1) {
         await redis.pexpire(key, windowMs);

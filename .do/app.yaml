@@ -25,15 +25,16 @@ services:
         value: ${inventory-server.PRIVATE_URL}
       - key: MANAGER_SERVER_URL
         value: ${server-manager.PRIVATE_URL}
+      # Empty = relative paths; browser calls /api/* which proxy routes forward
       - key: NEXT_PUBLIC_INVENTORY_URL
         scope: BUILD_TIME
-        value: https://gadnuc.com/api
+        value: ""
       - key: NEXT_PUBLIC_MANAGER_URL
         scope: BUILD_TIME
-        value: https://gadnuc.com/manager
+        value: /manager
       - key: NEXT_PUBLIC_WS_URL
         scope: BUILD_TIME
-        value: wss://gadnuc.com
+        value: ""
 
   # ── Inventory Server — internal only ───────────────────────────────────────
   - name: inventory-server
@@ -61,8 +62,6 @@ services:
         value: ${gadnuc-db.DATABASE_URL}
       - key: DB_SSL
         value: "true"
-      - key: REDIS_URL
-        type: SECRET
       - key: JWT_SECRET
         type: SECRET
       - key: TOTP_ENCRYPTION_KEY
@@ -128,8 +127,6 @@ services:
         value: ${gadnuc-db.DATABASE_URL}
       - key: DB_SSL
         value: "true"
-      - key: REDIS_URL
-        type: SECRET
       - key: JWT_SECRET
         type: SECRET
       - key: STRIPE_SECRET_KEY

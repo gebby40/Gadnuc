@@ -40,6 +40,9 @@ import { asyncHandler } from '../middleware/error-handler.js';
 
 export const authRouter = Router();
 
+// ── In-memory fallback for MFA pending secrets (when Redis is unavailable) ──
+const mfaPendingStore = new Map<string, { data: string; expiresAt: number }>();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -233,7 +236,12 @@ authRouter.post('/mfa/setup', requireAuth, asyncHandler(async (req: Request, res
     const qrUri = getTotpQrUri(secret, email);
     const { getRedisClient } = await import('@gadnuc/db');
     const redis = getRedisClient();
-    await redis.set(`mfa_pending:${authUser.userId}:${tenant.id}`, secret, 'EX', 10 * 60);
+    const pendingKey = `mfa_pending:${authUser.userId}:${tenant.id}`;
+    if (redis) {
+      await redis.set(pendingKey, secret, 'EX', 10 * 60);
+    } else {
+      mfaPendingStore.set(pendingKey, { data: secret, expiresAt: Date.now() + 10 * 60 * 1000 });
+    }
 
     res.json({ secret, qr_uri: qrUri });
   } catch (err) {
@@ -261,7 +269,20 @@ authRouter.post('/mfa/setup/confirm', requireAuth, mfaRateLimit(), asyncHandler(
   try {
     const { getRedisClient } = await import('@gadnuc/db');
     const redis  = getRedisClient();
-    const secret = await redis.get(`mfa_pending:${authUser.userId}:${tenant.id}`);
+    const pendingKey = `mfa_pending:${authUser.userId}:${tenant.id}`;
+
+    let secret: string | null = null;
+    if (redis) {
+      secret = await redis.get(pendingKey);
+    } else {
+      const entry = mfaPendingStore.get(pendingKey);
+      if (entry && entry.expiresAt > Date.now()) {
+        secret = entry.data;
+      } else if (entry) {
+        mfaPendingStore.delete(pendingKey);
+      }
+    }
+
     if (!secret) {
       res.status(400).json({ error: 'No pending MFA setup — call /mfa/setup first' });
       return;
@@ -280,7 +301,11 @@ authRouter.post('/mfa/setup/confirm', requireAuth, mfaRateLimit(), asyncHandler(
       );
     });
 
-    await redis.del(`mfa_pending:${authUser.userId}:${tenant.id}`);
+    if (redis) {
+      await redis.del(pendingKey);
+    } else {
+      mfaPendingStore.delete(pendingKey);
+    }
     logAuditEvent({ req, action: 'auth.mfa_enabled', tenantId: tenant.id, userId: authUser.userId });
     res.json({ message: 'MFA enabled successfully' });
   } catch (err) {

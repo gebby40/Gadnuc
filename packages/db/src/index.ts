@@ -8,6 +8,6 @@ export {
   listTenantSchemas,
 } from './tenant-schema.js';
 export { runMigrations } from './migrate.js';
-export { createRedisClient, getRedisClient } from './redis.js';
+export { createRedisClient, getRedisClient, isRedisDisabled } from './redis.js';
 export type { TenantDbClient } from './tenant-schema.js';
 export type { PoolStats } from './client.js';

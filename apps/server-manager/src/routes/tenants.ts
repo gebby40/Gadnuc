@@ -248,8 +248,10 @@ tenantsRouter.delete('/:id', async (req, res) => {
     try {
       const { getRedisClient } = await import('@gadnuc/db');
       const redis = getRedisClient();
-      const keys  = await redis.keys(`*:${slug}:*`);
-      if (keys.length) await redis.del(...keys);
+      if (redis) {
+        const keys = await redis.keys(`*:${slug}:*`);
+        if (keys.length) await redis.del(...keys);
+      }
     } catch {/* Redis may not be configured in all envs */}
 
     console.log(`[tenants] GDPR deletion complete: ${slug}`);
