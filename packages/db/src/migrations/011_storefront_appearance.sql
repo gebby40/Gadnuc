@@ -31,6 +31,15 @@ BEGIN
          ADD COLUMN IF NOT EXISTS footer_text_color CHAR(7)',
       rec.schema_name
     );
+    -- Singleton index for ON CONFLICT upsert
+    EXECUTE format(
+      'CREATE UNIQUE INDEX IF NOT EXISTS storefront_settings_singleton ON %I.storefront_settings ((true))',
+      rec.schema_name
+    );
   END LOOP;
 END;
 $$;
+
+-- ── 3. Singleton index on template ──────────────────────────────────────────
+CREATE UNIQUE INDEX IF NOT EXISTS storefront_settings_singleton
+  ON tenant_template.storefront_settings ((true));
