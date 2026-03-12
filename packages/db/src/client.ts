@@ -2,10 +2,11 @@ import { Pool, PoolConfig } from 'pg';
 
 // DB_SSL=false disables SSL for local/Docker environments where the Postgres
 // server has no TLS certificate (e.g. docker-compose).  In production leave
-// this unset; SSL with certificate verification is enforced automatically.
+// this unset; SSL is enabled with rejectUnauthorized=false for compatibility
+// with DigitalOcean Managed Postgres (which uses a self-signed CA).
 function sslConfig(): { rejectUnauthorized: boolean } | false {
   if (process.env.DB_SSL === 'false') return false;
-  return process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false;
+  return process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false;
 }
 
 // ── Primary (read-write) pool ─────────────────────────────────────────────────
