@@ -22,11 +22,13 @@ export interface AuthUser {
 export interface LoginSuccess {
   access_token: string;
   token_type: string;
+  tenant_slug?: string;
 }
 
 export interface MfaRequired {
   mfa_required: true;
   mfa_token: string;
+  tenant_slug?: string;
 }
 
 export type LoginResult = LoginSuccess | MfaRequired;
@@ -68,6 +70,20 @@ export async function tenantLogin(slug: string, email: string, password: string)
       'Content-Type': 'application/json',
       'x-tenant-slug': slug,
     },
+    credentials: 'include',
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? 'Login failed');
+  }
+  return res.json();
+}
+
+export async function tenantLoginDiscover(email: string, password: string): Promise<LoginResult> {
+  const res = await fetch(`${INVENTORY_URL}/api/auth/login-discover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ email, password }),
   });

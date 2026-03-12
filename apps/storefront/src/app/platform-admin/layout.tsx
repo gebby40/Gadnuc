@@ -20,7 +20,7 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
   // Auth guard — redirect to /login if not super_admin
   useEffect(() => {
     if (!isLoading && (!user || user.role !== 'super_admin')) {
-      router.push('/login');
+      router.push('/admin');
     }
   }, [isLoading, user, router]);
 
@@ -33,7 +33,7 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
   async function handleLogout() {
     await platformLogout();
     logout();
-    router.push('/login');
+    router.push('/admin');
   }
 
   return (

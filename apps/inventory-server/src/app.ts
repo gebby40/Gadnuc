@@ -20,6 +20,7 @@ import { messagingRouter }      from './routes/messaging.js';
 import { stripeConnectRouter }  from './routes/stripe-connect.js';
 import { webhooksRouter }       from './routes/webhooks.js';
 import { apiKeysRouter }        from './routes/api-keys.js';
+import { authDiscoverRouter }   from './routes/auth-discover.js';
 import { featureGuard }         from '@gadnuc/feature-flags';
 import { tenantRateLimit }      from './middleware/tenant-rate-limit.js';
 import { globalErrorHandler }   from './middleware/error-handler.js';
@@ -129,6 +130,9 @@ export function createApp() {
     res.set('Content-Type', register.contentType);
     res.end(await register.metrics());
   });
+
+  // ── Slug-less tenant login (before tenant resolution — no slug needed) ──
+  app.use('/api/auth', authDiscoverRouter);
 
   // ── Tenant resolution (all routes below require a valid tenant) ───────
   app.use(tenantMiddleware);
