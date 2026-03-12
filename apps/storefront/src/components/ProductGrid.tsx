@@ -12,12 +12,11 @@ function formatPrice(cents: number): string {
 }
 
 /**
- * Product grid with WordPress/WooCommerce-style constrained image cards.
+ * WooCommerce-style product grid with fixed column counts.
  *
- * Each card has a fixed max-width of 320px so images stay sharp and
- * consistent regardless of the source file dimensions.  Next.js Image
- * optimisation is enabled — images are served as WebP at the appropriate
- * size (roughly 320×427 for the 3:4 grid thumbnails on 1x, 640×854 on 2x).
+ * Layout: 2 cols mobile → 3 cols tablet → 4 cols desktop
+ * Images: square 1:1 thumbnails (like WooCommerce default),
+ *         max 260px wide, served as optimised WebP via Next.js.
  */
 export function ProductGrid({ products, tenantSlug }: Props) {
   if (!products.length) {
@@ -29,29 +28,22 @@ export function ProductGrid({ products, tenantSlug }: Props) {
   }
 
   return (
-    <div
-      className="grid gap-x-5 gap-y-8"
-      style={{
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        maxWidth: '100%',
-      }}
-    >
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-6 sm:gap-x-5 sm:gap-y-8">
       {products.map((product) => (
         <Link
           key={product.id}
           href={`/tenant/${tenantSlug}/products/${product.id}`}
-          style={{ textDecoration: 'none', color: 'inherit', maxWidth: '320px' }}
+          className="block"
+          style={{ textDecoration: 'none', color: 'inherit' }}
         >
           <article className="group cursor-pointer">
-            {/* Thumbnail — capped at 320×427 (3:4) */}
+            {/* Square thumbnail like WooCommerce */}
             <div
-              className="relative overflow-hidden mb-3"
+              className="relative overflow-hidden mb-2 sm:mb-3"
               style={{
-                aspectRatio: '3 / 4',
+                aspectRatio: '1 / 1',
                 background: 'var(--color-bg-secondary)',
                 borderRadius: 'var(--radius-card)',
-                maxWidth:  '320px',
-                maxHeight: '427px',
               }}
             >
               {product.image_url ? (
@@ -59,13 +51,13 @@ export function ProductGrid({ products, tenantSlug }: Props) {
                   src={product.image_url}
                   alt={product.name}
                   fill
-                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
+                  sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 260px"
                   className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                   quality={80}
                 />
               ) : (
                 <div
-                  className="w-full h-full flex items-center justify-center text-5xl"
+                  className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl"
                   style={{ color: 'var(--color-border)' }}
                 >
                   📦
@@ -73,7 +65,7 @@ export function ProductGrid({ products, tenantSlug }: Props) {
               )}
               {product.stock_qty === 0 && (
                 <div
-                  className="absolute inset-0 flex items-center justify-center text-sm font-semibold tracking-wide uppercase"
+                  className="absolute inset-0 flex items-center justify-center text-xs sm:text-sm font-semibold tracking-wide uppercase"
                   style={{ background: 'rgba(0,0,0,0.5)', color: '#fff' }}
                 >
                   Sold Out
@@ -81,21 +73,19 @@ export function ProductGrid({ products, tenantSlug }: Props) {
               )}
             </div>
 
-            {/* Info */}
-            <div style={{ maxWidth: '320px' }}>
-              <h3
-                className="font-medium text-sm mb-1 line-clamp-2"
-                style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}
-              >
-                {product.name}
-              </h3>
-              <span
-                className="text-sm font-semibold"
-                style={{ color: 'var(--color-text)' }}
-              >
-                {formatPrice(product.price_cents)}
-              </span>
-            </div>
+            {/* Product info */}
+            <h3
+              className="font-medium text-xs sm:text-sm mb-0.5 line-clamp-2 leading-snug"
+              style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}
+            >
+              {product.name}
+            </h3>
+            <span
+              className="text-xs sm:text-sm font-semibold"
+              style={{ color: 'var(--color-text)' }}
+            >
+              {formatPrice(product.price_cents)}
+            </span>
           </article>
         </Link>
       ))}
