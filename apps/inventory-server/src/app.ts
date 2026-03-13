@@ -139,7 +139,7 @@ export function createApp() {
   app.use('/api/ws/messaging', (req, res, next) => {
     const io = getMessagingIO();
     if (io) {
-      io.engine.handleRequest(req, res);
+      (io.engine as any).handleRequest(req, res);
     } else {
       next();
     }
