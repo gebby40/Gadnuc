@@ -7,7 +7,10 @@
 
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3001';
+// In production the Socket.IO endpoint lives behind the same origin
+// (routed via DO App Platform ingress to inventory-server).
+// Only override for local dev where inventory-server runs on a different port.
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || '';
 
 export interface MessageEvent {
   id:          string;
