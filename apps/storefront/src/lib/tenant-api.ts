@@ -74,6 +74,9 @@ export interface Product {
   tags:             string[];
   brand:            string | null;
   is_featured:      boolean;
+  sale_start:       string | null;
+  sale_end:         string | null;
+  wholesale_price_cents: number | null;
 }
 
 export interface ProductListMeta {

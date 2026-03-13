@@ -17,7 +17,7 @@ COPY packages/ ./packages/
 COPY apps/inventory-server/ ./apps/inventory-server/
 
 # Cache buster — change this value to force a fresh build layer
-ARG CACHEBUST=3
+ARG CACHEBUST=4
 
 RUN npm run build -w packages/db && \
     npm run build -w packages/auth && \

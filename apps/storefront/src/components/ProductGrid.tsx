@@ -33,6 +33,7 @@ export function ProductGrid({ products, tenantSlug }: Props) {
       {products.map((product) => {
         const onSale = product.sale_price_cents != null && product.sale_price_cents < product.price_cents;
         const displayPrice = onSale ? product.sale_price_cents! : product.price_cents;
+        const savePct = onSale ? Math.round((1 - product.sale_price_cents! / product.price_cents) * 100) : 0;
 
         return (
           <Link
@@ -76,13 +77,13 @@ export function ProductGrid({ products, tenantSlug }: Props) {
                     Sold Out
                   </div>
                 )}
-                {/* Sale badge */}
+                {/* Sale badge with percentage */}
                 {onSale && product.stock_qty > 0 && (
                   <span
                     className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold"
                     style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-fg)' }}
                   >
-                    Sale
+                    {savePct > 0 ? `Save ${savePct}%` : 'Sale'}
                   </span>
                 )}
               </div>

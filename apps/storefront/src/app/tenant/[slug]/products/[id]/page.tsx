@@ -31,6 +31,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const lowStock    = inStock && product.stock_qty <= 5;
   const onSale      = product.sale_price_cents != null && product.sale_price_cents < product.price_cents;
   const displayPrice = onSale ? product.sale_price_cents! : product.price_cents;
+  const savePct     = onSale ? Math.round((1 - product.sale_price_cents! / product.price_cents) * 100) : 0;
 
   // Related products (same category)
   const related = await getRelatedProducts(params.slug, product.id, product.category);
@@ -109,13 +110,13 @@ export default async function ProductDetailPage({ params }: PageProps) {
               📦
             </div>
           )}
-          {/* Sale badge */}
+          {/* Sale badge with percentage */}
           {onSale && (
             <span
               className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold"
               style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-fg)' }}
             >
-              Sale
+              {savePct > 0 ? `Save ${savePct}%` : 'Sale'}
             </span>
           )}
         </div>

@@ -164,12 +164,20 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
       );
       const total = countRows[0]?.cnt ?? 0;
 
-      // Data query
+      // Data query — sale_price_cents is only returned when the sale window is active
       params.push(limitNum, offset);
       const { rows } = await db.query(
-        `SELECT id, sku, name, description, category, price_cents, sale_price_cents,
+        `SELECT id, sku, name, description, category, price_cents,
+                CASE
+                  WHEN sale_price_cents IS NOT NULL
+                   AND (sale_start IS NULL OR sale_start <= now())
+                   AND (sale_end   IS NULL OR sale_end   >= now())
+                  THEN sale_price_cents
+                  ELSE NULL
+                END AS sale_price_cents,
                 stock_qty, image_url, metadata, weight_oz, length_in, width_in,
-                height_in, shipping_class, tags, brand, is_featured
+                height_in, shipping_class, tags, brand, is_featured,
+                sale_start, sale_end, wholesale_price_cents
          FROM products
          WHERE ${where}
          ORDER BY ${orderBy}
@@ -202,10 +210,17 @@ storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
   try {
     const row = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query(
-        `SELECT id, sku, name, description, category, price_cents, sale_price_cents,
+        `SELECT id, sku, name, description, category, price_cents,
+                CASE
+                  WHEN sale_price_cents IS NOT NULL
+                   AND (sale_start IS NULL OR sale_start <= now())
+                   AND (sale_end   IS NULL OR sale_end   >= now())
+                  THEN sale_price_cents
+                  ELSE NULL
+                END AS sale_price_cents,
                 stock_qty, low_stock_threshold, image_url, metadata,
                 weight_oz, length_in, width_in, height_in, shipping_class,
-                tags, brand, is_featured
+                tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents
          FROM products
          WHERE id = $1 AND is_active = true`,
         [req.params.id],
