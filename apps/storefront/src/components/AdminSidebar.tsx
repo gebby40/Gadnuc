@@ -31,6 +31,14 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
   const manageItems: NavItem[] = [
     { href: `${base}/dashboard`,          label: 'Dashboard' },
     { href: `${base}/dashboard/products`, label: 'Products' },
+    {
+      href: `${base}/dashboard/pricing`,
+      label: 'Pricing',
+      children: [
+        { href: `${base}/dashboard/pricing/discounts`,        label: 'Discount Rules' },
+        { href: `${base}/dashboard/pricing/customer-groups`,  label: 'Customer Groups' },
+      ],
+    },
   ];
 
   const storeItems: NavItem[] = [
@@ -51,7 +59,7 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
     if (href === `${base}/dashboard`) return pathname === href;
     // Storefront home: exact match only
     if (href === base) return pathname === base;
-    // Everything else: prefix match
+    // Everything else: prefix match (handles nested routes like pricing/discounts)
     return pathname.startsWith(href);
   }
 
