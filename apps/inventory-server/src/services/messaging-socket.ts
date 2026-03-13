@@ -63,7 +63,7 @@ export function createMessagingSocket(httpServer: HttpServer): SocketServer {
     .filter(Boolean);
 
   const io = new SocketServer(httpServer, {
-    path:        '/ws/messaging',
+    path:        '/api/ws/messaging',
     cors: {
       origin:      allowedOrigins.length ? allowedOrigins : '*',
       credentials: true,

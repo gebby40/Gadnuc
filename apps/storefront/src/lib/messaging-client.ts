@@ -151,8 +151,8 @@ export function getSocket(tenantSlug: string, token?: string, displayName?: stri
   }
 
   _socket = io(WS_URL, {
-    path:       '/ws/messaging',
-    transports: ['websocket', 'polling'],
+    path:       '/api/ws/messaging',
+    transports: ['polling', 'websocket'],
     query:      { tenantSlug },
     auth: token
       ? { token }
