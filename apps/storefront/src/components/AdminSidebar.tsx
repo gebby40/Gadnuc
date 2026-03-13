@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser } from '@/lib/auth';
@@ -10,25 +11,36 @@ interface Props {
   onLogout: () => void;
 }
 
+interface NavItem {
+  href: string;
+  label: string;
+  children?: { href: string; label: string }[];
+}
+
 /**
  * Persistent admin sidebar shown on ALL tenant pages when the user
  * is logged in as an operator or tenant_admin.
  * Two nav sections: management pages + storefront browsing.
+ * Supports expandable sub-items under parent nav entries.
  */
 export function AdminSidebar({ slug, user, onLogout }: Props) {
   const pathname = usePathname();
   const router   = useRouter();
   const base     = `/tenant/${slug}`;
 
-  const manageItems = [
-    { href: `${base}/dashboard`,             label: 'Dashboard' },
-    { href: `${base}/dashboard/products`,    label: 'Products' },
-    { href: `${base}/dashboard/appearance`,  label: 'Appearance' },
-    { href: `${base}/dashboard/settings`,    label: 'Settings' },
+  const manageItems: NavItem[] = [
+    { href: `${base}/dashboard`,          label: 'Dashboard' },
+    { href: `${base}/dashboard/products`, label: 'Products' },
   ];
 
-  const storeItems = [
-    { href: base,                label: 'Storefront' },
+  const storeItems: NavItem[] = [
+    {
+      href: base,
+      label: 'Storefront',
+      children: [
+        { href: `${base}/dashboard/storefront-settings`, label: 'Settings' },
+      ],
+    },
     { href: `${base}/products`,  label: 'Browse Products' },
     { href: `${base}/cart`,      label: 'Cart' },
     { href: `${base}/workspace`, label: 'Workspace' },
@@ -68,41 +80,17 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
         <div style={{ padding: '0.75rem 1.25rem 0.25rem', fontSize: '0.65rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Manage
         </div>
-        {manageItems.map(({ href, label }) => {
-          const active = isActive(href);
-          return (
-            <Link key={href} href={href} style={{
-              display: 'block', padding: '0.55rem 1.25rem',
-              color: active ? '#f8fafc' : '#94a3b8',
-              background: active ? '#1e293b' : 'transparent',
-              textDecoration: 'none', fontSize: '0.85rem',
-              borderLeft: active ? '3px solid #3b82f6' : '3px solid transparent',
-              transition: 'all 0.15s',
-            }}>
-              {label}
-            </Link>
-          );
-        })}
+        {manageItems.map((item) => (
+          <NavLink key={item.href} item={item} isActive={isActive} />
+        ))}
 
         {/* Store section */}
         <div style={{ padding: '1rem 1.25rem 0.25rem', fontSize: '0.65rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Store
         </div>
-        {storeItems.map(({ href, label }) => {
-          const active = isActive(href);
-          return (
-            <Link key={href} href={href} style={{
-              display: 'block', padding: '0.55rem 1.25rem',
-              color: active ? '#f8fafc' : '#94a3b8',
-              background: active ? '#1e293b' : 'transparent',
-              textDecoration: 'none', fontSize: '0.85rem',
-              borderLeft: active ? '3px solid #3b82f6' : '3px solid transparent',
-              transition: 'all 0.15s',
-            }}>
-              {label}
-            </Link>
-          );
-        })}
+        {storeItems.map((item) => (
+          <NavLink key={item.href} item={item} isActive={isActive} />
+        ))}
       </nav>
 
       {/* Footer: sign out */}
@@ -115,5 +103,65 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
         </button>
       </div>
     </aside>
+  );
+}
+
+/** Single nav link with optional expandable children */
+function NavLink({ item, isActive }: { item: NavItem; isActive: (href: string) => boolean }) {
+  const hasChildren = item.children && item.children.length > 0;
+  const parentActive = isActive(item.href);
+  const anyChildActive = hasChildren && item.children!.some((c) => isActive(c.href));
+  const [expanded, setExpanded] = useState(parentActive || anyChildActive);
+
+  const active = parentActive;
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <Link href={item.href} style={{
+          display: 'block', padding: '0.55rem 1.25rem', flex: 1,
+          color: active ? '#f8fafc' : '#94a3b8',
+          background: active ? '#1e293b' : 'transparent',
+          textDecoration: 'none', fontSize: '0.85rem',
+          borderLeft: active ? '3px solid #3b82f6' : '3px solid transparent',
+          transition: 'all 0.15s',
+        }}>
+          {item.label}
+        </Link>
+        {hasChildren && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            style={{
+              background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
+              padding: '0.55rem 0.75rem', fontSize: '0.7rem', lineHeight: 1,
+              transition: 'transform 0.15s',
+              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}
+            aria-label={expanded ? 'Collapse' : 'Expand'}
+          >
+            ▸
+          </button>
+        )}
+      </div>
+      {hasChildren && expanded && (
+        <div>
+          {item.children!.map((child) => {
+            const childActive = isActive(child.href);
+            return (
+              <Link key={child.href} href={child.href} style={{
+                display: 'block', padding: '0.4rem 1.25rem 0.4rem 2.25rem',
+                color: childActive ? '#f8fafc' : '#94a3b8',
+                background: childActive ? '#1e293b' : 'transparent',
+                textDecoration: 'none', fontSize: '0.8rem',
+                borderLeft: childActive ? '3px solid #3b82f6' : '3px solid transparent',
+                transition: 'all 0.15s',
+              }}>
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }

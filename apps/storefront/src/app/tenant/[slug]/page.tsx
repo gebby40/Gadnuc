@@ -1,6 +1,10 @@
 /**
  * Tenant storefront homepage.
  * Nav, Footer, and ThemeProvider are injected by the parent layout.tsx.
+ *
+ * If the tenant has uploaded a custom HTML page and enabled it,
+ * we render that in a full-width sandboxed iframe instead of the
+ * auto-generated hero + product grid.
  */
 import { getTenantStorefront } from '@/lib/tenant-api';
 import { HeroSection }  from '@/components/HeroSection';
@@ -14,6 +18,24 @@ interface PageProps {
 export default async function TenantHomePage({ params }: PageProps) {
   const { settings, products } = await getTenantStorefront(params.slug);
 
+  // ── Custom homepage: render iframe ────────────────────────────────────────
+  if (settings.custom_homepage_enabled && settings.custom_homepage_url) {
+    return (
+      <iframe
+        src={settings.custom_homepage_url}
+        title="Custom storefront"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+        style={{
+          width: '100%',
+          minHeight: 'calc(100vh - 64px)',
+          border: 'none',
+          display: 'block',
+        }}
+      />
+    );
+  }
+
+  // ── Default auto-generated storefront ────────────────────────────────────
   return (
     <>
       <HeroSection

@@ -16,6 +16,7 @@ export const uploadsRouter = Router();
 
 const ALLOWED_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+  'text/html',
 ]);
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -40,7 +41,7 @@ function getS3(): S3Client {
 const presignSchema = z.object({
   filename:    z.string().min(1).max(255),
   contentType: z.string().refine((t) => ALLOWED_TYPES.has(t), {
-    message: 'Content type not allowed. Supported: JPEG, PNG, WebP, GIF, AVIF',
+    message: 'Content type not allowed. Supported: JPEG, PNG, WebP, GIF, AVIF, HTML',
   }),
   sizeBytes:   z.number().int().min(1).max(MAX_SIZE_BYTES),
 });

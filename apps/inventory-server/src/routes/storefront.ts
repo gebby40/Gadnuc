@@ -73,6 +73,8 @@ const patchSettingsSchema = z.object({
   seo_title:        z.string().max(70).optional(),
   seo_description:  z.string().max(160).optional(),
   custom_css:       z.string().optional(),
+  custom_homepage_enabled: z.boolean().optional(),
+  custom_homepage_url:     z.string().url().optional().or(z.literal('')),
 }).strict();
 
 storefrontRouter.patch(
