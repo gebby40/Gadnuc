@@ -14,7 +14,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { decodeTokenPayload } from '@/lib/auth';
 import {
   loginOperator, saveToken, loadToken, clearToken,
-  fetchRooms, fetchMessages, markRead, getSocket, disconnectSocket,
+  fetchRooms, fetchMessages, markRead, getSocket, disconnectSocket, createRoom,
   type Room, type MessageEvent,
 } from '@/lib/messaging-client';
 
@@ -174,6 +174,105 @@ function TypingIndicator({ names }: { names: string[] }) {
   );
 }
 
+// ── Create channel modal ──────────────────────────────────────────────────────
+
+function CreateChannelModal({ onClose, onCreate }: {
+  onClose: () => void;
+  onCreate: (name: string, topic?: string) => Promise<void>;
+}) {
+  const [name,    setName]    = useState('');
+  const [topic,   setTopic]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await onCreate(name.trim(), topic.trim() || undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create channel');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-sm p-6 rounded-2xl"
+        style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
+      >
+        <h3 className="text-lg font-bold mb-4" style={{ color: 'var(--color-text)' }}>
+          Create Channel
+        </h3>
+
+        {error && (
+          <div className="mb-3 px-3 py-2 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
+              Channel name
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. random"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              required
+              autoFocus
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+              style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
+              Topic <span className="opacity-50">(optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="What's this channel about?"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              maxLength={500}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+              style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg text-sm font-medium transition-opacity"
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim() || loading}
+              className="flex-1 py-2 rounded-lg text-sm font-semibold transition-opacity disabled:opacity-50"
+              style={{ background: 'var(--color-primary)', color: 'var(--color-primary-fg)' }}
+            >
+              {loading ? 'Creating…' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Main WorkspaceChat component ──────────────────────────────────────────────
 
 interface Props {
@@ -194,6 +293,7 @@ export function WorkspaceChat({ slug }: Props) {
   const [loadingRooms,  setLoadingRooms]  = useState(false);
   const [loadingMsgs,   setLoadingMsgs]   = useState(false);
   const [presence,      setPresence]      = useState<Record<string, 'online' | 'offline'>>({});
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const bottomRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
@@ -341,6 +441,22 @@ export function WorkspaceChat({ slug }: Props) {
     authLogout(); // Also clear main auth (single sign-out)
   }
 
+  // ── Create channel ────────────────────────────────────────────────────────
+  async function handleCreateChannel(name: string, topic?: string) {
+    if (!token) return;
+    const room = await createRoom(slug, token, { name, topic });
+    // Refresh room list so we get proper unread_count / role fields
+    const updatedRooms = await fetchRooms(slug, token);
+    setRooms(updatedRooms);
+    // Select the new room
+    const newRoom = updatedRooms.find((r) => r.id === room.id) ?? updatedRooms[0];
+    if (newRoom) setActiveRoom(newRoom);
+    // Re-join socket rooms so real-time events work for the new room
+    const socket = getSocket(slug, token);
+    socket.emit('join_rooms', () => {});
+    setShowCreateModal(false);
+  }
+
   // ── Login gate ──────────────────────────────────────────────────────────────
   if (authLoading) {
     return (
@@ -384,14 +500,24 @@ export function WorkspaceChat({ slug }: Props) {
           <span className="font-semibold text-sm truncate" style={{ color: 'var(--color-text)' }}>
             # Workspace
           </span>
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            className="text-xs opacity-60 hover:opacity-100 transition-opacity"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            ⏻
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              title="Create channel"
+              className="text-sm opacity-60 hover:opacity-100 transition-opacity px-1"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              +
+            </button>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="text-xs opacity-60 hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              ⏻
+            </button>
+          </div>
         </div>
 
         {/* Room list */}
@@ -528,6 +654,14 @@ export function WorkspaceChat({ slug }: Props) {
           </div>
         )}
       </div>
+
+      {/* ── Create channel modal ── */}
+      {showCreateModal && (
+        <CreateChannelModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreateChannel}
+        />
+      )}
     </div>
   );
 }

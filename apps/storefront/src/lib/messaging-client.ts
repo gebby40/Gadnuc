@@ -120,6 +120,24 @@ export async function markRead(tenantSlug: string, roomId: string, token: string
   }).catch(() => {/* non-critical */});
 }
 
+export async function createRoom(
+  tenantSlug: string,
+  token: string,
+  data: { name: string; topic?: string; roomType?: 'channel' | 'direct'; isPublic?: boolean },
+): Promise<Room> {
+  const res = await fetch(`${API_BASE}/api/messaging/rooms`, {
+    method:  'POST',
+    headers: headers(tenantSlug, token),
+    body:    JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Could not create channel');
+  }
+  const body = await res.json();
+  return body.data;
+}
+
 export async function startSupportRoom(
   tenantSlug: string,
   displayName: string,
