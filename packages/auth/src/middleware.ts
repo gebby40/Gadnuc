@@ -40,6 +40,18 @@ export async function requireAuth(
     // Enforce tenant isolation: the token's tenantSlug must match the request's tenant
     const requestTenantSlug = (req as Request & { tenantSlug?: string }).tenantSlug;
     if (requestTenantSlug && payload.tenantSlug !== requestTenantSlug) {
+      // super_admin can access any tenant — override context to the target tenant
+      if (payload.role === 'super_admin') {
+        req.user = {
+          userId:     payload.sub,
+          tenantId:   payload.tenantId,
+          tenantSlug: requestTenantSlug,
+          role:       payload.role,
+          email:      payload.email,
+        };
+        next();
+        return;
+      }
       res.status(403).json({ error: 'Token does not belong to this tenant' });
       return;
     }

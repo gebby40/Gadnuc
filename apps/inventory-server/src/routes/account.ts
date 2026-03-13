@@ -217,14 +217,16 @@ accountRouter.delete('/', requireRole('tenant_admin'), async (req, res) => {
 
   const pool = getPool();
   const slug = req.tenantSlug!;
-  const tenantId = req.user!.tenantId;
 
   try {
+    // Look up tenant by slug (not req.user.tenantId which may be platform ID for super_admins)
     const { rows: [existing] } = await pool.query(
-      'SELECT slug, stripe_subscription_id, stripe_connect_account_id FROM public.tenants WHERE id = $1',
-      [tenantId],
+      'SELECT id, slug, stripe_subscription_id, stripe_connect_account_id FROM public.tenants WHERE slug = $1',
+      [slug],
     );
     if (!existing) { res.status(404).json({ error: 'Tenant not found' }); return; }
+
+    const tenantId = existing.id;
 
     // Record deletion request (permanent audit trail)
     await pool.query(
