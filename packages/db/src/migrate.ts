@@ -17,6 +17,12 @@ const MIGRATION_FILES = [
   '008_webhooks.sql',
   '009_api_keys.sql',
   '010_platform_admins.sql',
+  '011_storefront_appearance.sql',
+  '012_custom_homepage.sql',
+  '013_product_enhancements.sql',
+  '014_discount_rules.sql',
+  '015_wholesale_pricing.sql',
+  '016_customer_accounts.sql',
 ];
 
 export async function runMigrations(pool?: Pool): Promise<void> {
