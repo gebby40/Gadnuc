@@ -297,7 +297,7 @@ export default function StorefrontSettingsPage() {
   ];
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px' }}>
+    <div style={{ padding: '2rem', maxWidth: tab === 'custom-page' ? '1100px' : '800px', transition: 'max-width 0.2s' }}>
       {/* Header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
@@ -404,149 +404,158 @@ function CustomPageTab({
   onSave: () => void;
   onRemove: () => void;
 }) {
+  const siteBase = typeof window !== 'undefined' ? window.location.origin : '';
+  const storeUrl = `${siteBase}/tenant/${slug}`;
+
   return (
-    <>
-      <Section title="Custom Homepage">
-        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.6 }}>
-          Upload your own HTML page to replace the auto-generated storefront homepage.
-          When enabled, visitors will see your custom page instead of the default hero banner and product grid.
-          You can revert to the default at any time.
-        </p>
+    <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
+      {/* ── Left column: Upload controls ─────────────────────────────────── */}
+      <div style={{ flex: '1 1 0', minWidth: 0 }}>
+        <Section title="Custom Homepage">
+          <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.6 }}>
+            Upload your own HTML page to replace the auto-generated storefront homepage.
+            When enabled, visitors will see your custom page instead of the default hero banner and product grid.
+            You can revert to the default at any time.
+          </p>
 
-        {/* Toggle */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem',
-          padding: '0.75rem 1rem', background: settings.custom_homepage_enabled ? '#eff6ff' : '#f8fafc',
-          borderRadius: '8px', border: `1px solid ${settings.custom_homepage_enabled ? '#bfdbfe' : '#e2e8f0'}`,
-        }}>
-          <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
-            <input
-              type="checkbox"
-              checked={!!settings.custom_homepage_enabled}
-              onChange={(e) => onUpdate('custom_homepage_enabled', e.target.checked)}
-              style={{ opacity: 0, width: 0, height: 0 }}
-            />
-            <span style={{
-              position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: '24px',
-              background: settings.custom_homepage_enabled ? '#3b82f6' : '#cbd5e1',
-              transition: 'background 0.2s',
-            }}>
-              <span style={{
-                position: 'absolute', height: '18px', width: '18px', left: settings.custom_homepage_enabled ? '23px' : '3px',
-                bottom: '3px', background: '#fff', borderRadius: '50%', transition: 'left 0.2s',
-              }} />
-            </span>
-          </label>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#0f172a' }}>
-              Use custom homepage
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-              {settings.custom_homepage_enabled
-                ? 'Visitors see your uploaded custom page'
-                : 'Visitors see the auto-generated storefront'}
-            </div>
-          </div>
-        </div>
-
-        {/* Upload area */}
-        {settings.custom_homepage_url ? (
+          {/* Toggle */}
           <div style={{
-            padding: '1rem', background: '#f8fafc', borderRadius: '8px',
-            border: '1px solid #e2e8f0', marginBottom: '1rem',
+            display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem',
+            padding: '0.75rem 1rem', background: settings.custom_homepage_enabled ? '#eff6ff' : '#f8fafc',
+            borderRadius: '8px', border: `1px solid ${settings.custom_homepage_enabled ? '#bfdbfe' : '#e2e8f0'}`,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#0f172a', marginBottom: '0.25rem' }}>
-                  ✓ Custom page uploaded
-                </div>
-                <div style={{
-                  fontSize: '0.75rem', color: '#64748b', overflow: 'hidden',
-                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {settings.custom_homepage_url}
-                </div>
+            <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={!!settings.custom_homepage_enabled}
+                onChange={(e) => onUpdate('custom_homepage_enabled', e.target.checked)}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span style={{
+                position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: '24px',
+                background: settings.custom_homepage_enabled ? '#3b82f6' : '#cbd5e1',
+                transition: 'background 0.2s',
+              }}>
+                <span style={{
+                  position: 'absolute', height: '18px', width: '18px', left: settings.custom_homepage_enabled ? '23px' : '3px',
+                  bottom: '3px', background: '#fff', borderRadius: '50%', transition: 'left 0.2s',
+                }} />
+              </span>
+            </label>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#0f172a' }}>
+                Use custom homepage
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                <a
-                  href={settings.custom_homepage_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    padding: '0.35rem 0.75rem', background: '#fff', color: '#374151',
-                    border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.8rem',
-                    textDecoration: 'none',
-                  }}
-                >
-                  Preview ↗
-                </a>
-                <label style={{
-                  padding: '0.35rem 0.75rem', background: '#fff', color: '#3b82f6',
-                  border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.8rem',
-                  cursor: uploading === 'html' ? 'wait' : 'pointer',
-                }}>
-                  {uploading === 'html' ? 'Uploading...' : 'Replace'}
-                  <input type="file" accept=".html,.htm" hidden
-                    onChange={e => { const f = e.target.files?.[0]; if (f) onUploadHtml(f); }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={onRemove}
-                  style={{
-                    padding: '0.35rem 0.75rem', background: '#fff', color: '#ef4444',
-                    border: '1px solid #fca5a5', borderRadius: '6px', fontSize: '0.8rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Remove
-                </button>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                {settings.custom_homepage_enabled
+                  ? 'Visitors see your uploaded custom page'
+                  : 'Visitors see the auto-generated storefront'}
               </div>
             </div>
           </div>
-        ) : (
-          <label style={{
-            display: 'block', padding: '2rem', border: '2px dashed #d1d5db', borderRadius: '8px',
-            textAlign: 'center', cursor: uploading === 'html' ? 'wait' : 'pointer',
-            color: '#94a3b8', fontSize: '0.85rem', marginBottom: '1rem',
-            background: '#fafafa',
-          }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📄</div>
-            {uploading === 'html' ? 'Uploading HTML file...' : 'Click to upload an HTML file'}
-            <div style={{ fontSize: '0.75rem', marginTop: '0.35rem', color: '#94a3b8' }}>
-              .html or .htm — max 10 MB
+
+          {/* Upload area */}
+          {settings.custom_homepage_url ? (
+            <div style={{
+              padding: '1rem', background: '#f8fafc', borderRadius: '8px',
+              border: '1px solid #e2e8f0', marginBottom: '1rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#0f172a', marginBottom: '0.25rem' }}>
+                    ✓ Custom page uploaded
+                  </div>
+                  <div style={{
+                    fontSize: '0.75rem', color: '#64748b', overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {settings.custom_homepage_url}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                  <a
+                    href={settings.custom_homepage_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      padding: '0.35rem 0.75rem', background: '#fff', color: '#374151',
+                      border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.8rem',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Preview ↗
+                  </a>
+                  <label style={{
+                    padding: '0.35rem 0.75rem', background: '#fff', color: '#3b82f6',
+                    border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.8rem',
+                    cursor: uploading === 'html' ? 'wait' : 'pointer',
+                  }}>
+                    {uploading === 'html' ? 'Uploading...' : 'Replace'}
+                    <input type="file" accept=".html,.htm" hidden
+                      onChange={e => { const f = e.target.files?.[0]; if (f) onUploadHtml(f); }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={onRemove}
+                    style={{
+                      padding: '0.35rem 0.75rem', background: '#fff', color: '#ef4444',
+                      border: '1px solid #fca5a5', borderRadius: '6px', fontSize: '0.8rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
             </div>
-            <input type="file" accept=".html,.htm" hidden
-              onChange={e => { const f = e.target.files?.[0]; if (f) onUploadHtml(f); }}
-            />
-          </label>
-        )}
+          ) : (
+            <label style={{
+              display: 'block', padding: '2rem', border: '2px dashed #d1d5db', borderRadius: '8px',
+              textAlign: 'center', cursor: uploading === 'html' ? 'wait' : 'pointer',
+              color: '#94a3b8', fontSize: '0.85rem', marginBottom: '1rem',
+              background: '#fafafa',
+            }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📄</div>
+              {uploading === 'html' ? 'Uploading HTML file...' : 'Click to upload an HTML file'}
+              <div style={{ fontSize: '0.75rem', marginTop: '0.35rem', color: '#94a3b8' }}>
+                .html or .htm — max 10 MB
+              </div>
+              <input type="file" accept=".html,.htm" hidden
+                onChange={e => { const f = e.target.files?.[0]; if (f) onUploadHtml(f); }}
+              />
+            </label>
+          )}
 
-        {/* Info note */}
-        <div style={{
-          background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px',
-          padding: '0.75rem 1rem', fontSize: '0.8rem', color: '#92400e', lineHeight: 1.5,
-        }}>
-          <strong>Tip:</strong> Your HTML file can include inline CSS and JavaScript.
-          External resources (images, fonts, stylesheets) should use absolute URLs.
-          The custom page is displayed in a sandboxed frame for security.
+          {/* Info note */}
+          <div style={{
+            background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px',
+            padding: '0.75rem 1rem', fontSize: '0.8rem', color: '#92400e', lineHeight: 1.5,
+          }}>
+            <strong>Tip:</strong> Your HTML file can include inline CSS and JavaScript.
+            External resources (images, fonts, stylesheets) should use absolute URLs.
+            The custom page is displayed in a sandboxed frame for security.
+          </div>
+        </Section>
+
+        <div style={{ marginTop: '1rem' }}>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            style={{
+              padding: '0.6rem 1.5rem', background: saving ? '#94a3b8' : '#0f172a', color: '#fff',
+              border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600,
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {saving ? 'Saving...' : 'Save Custom Page Settings'}
+          </button>
         </div>
-      </Section>
-
-      <div style={{ marginTop: '1rem' }}>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          style={{
-            padding: '0.6rem 1.5rem', background: saving ? '#94a3b8' : '#0f172a', color: '#fff',
-            border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600,
-            cursor: saving ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Custom Page Settings'}
-        </button>
       </div>
-    </>
+
+      {/* ── Right column: Embed Reference ────────────────────────────────── */}
+      <EmbedReference slug={slug} storeUrl={storeUrl} />
+    </div>
   );
 }
 
@@ -969,6 +978,186 @@ function PaymentsTab({
     </div>
   );
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Embed Reference Panel (shown beside Custom Page tab)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function EmbedReference({ slug, storeUrl }: { slug: string; storeUrl: string }) {
+  const apiBase = `${storeUrl.replace(/\/tenant\/.*$/, '')}/api/storefront`;
+
+  return (
+    <div style={{
+      flex: '0 0 340px', background: '#f8fafc', borderRadius: '12px',
+      border: '1px solid #e2e8f0', padding: '1.25rem', fontSize: '0.8rem',
+      color: '#334155', maxHeight: 'calc(100vh - 200px)', overflowY: 'auto',
+    }}>
+      <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a', marginTop: 0, marginBottom: '0.75rem' }}>
+        Embed Reference
+      </h3>
+      <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.5 }}>
+        Use these URLs and snippets in your custom HTML page to display store data and link to products.
+      </p>
+
+      {/* ── Store Links ─────────────────────────────────────────────────── */}
+      <RefSection title="Store Links">
+        <RefRow label="All Products">
+          <CopyBlock text={`${storeUrl}/products`} />
+        </RefRow>
+        <RefRow label="Single Product">
+          <CopyBlock text={`${storeUrl}/products/{id}`} />
+        </RefRow>
+        <RefRow label="Shopping Cart">
+          <CopyBlock text={`${storeUrl}/cart`} />
+        </RefRow>
+      </RefSection>
+
+      {/* ── Product API ─────────────────────────────────────────────────── */}
+      <RefSection title="Products API (JSON)">
+        <RefRow label="List products">
+          <CopyBlock text={`${apiBase}/products?slug=${slug}`} />
+        </RefRow>
+        <RefRow label="Single product">
+          <CopyBlock text={`${apiBase}/products/{id}?slug=${slug}`} />
+        </RefRow>
+        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.35rem', lineHeight: 1.5 }}>
+          Query params: <code style={codeInline}>category</code>, <code style={codeInline}>search</code>,
+          {' '}<code style={codeInline}>page</code>, <code style={codeInline}>limit</code>,
+          {' '}<code style={codeInline}>sort</code> (name_asc, price_asc, etc.)
+        </div>
+      </RefSection>
+
+      {/* ── Product Data Fields ─────────────────────────────────────────── */}
+      <RefSection title="Product Fields">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+          {['id', 'sku', 'name', 'description', 'category', 'price_cents', 'stock_qty', 'image_url'].map((f) => (
+            <code key={f} style={{
+              ...codeInline, background: '#e2e8f0', fontSize: '0.7rem', padding: '0.15rem 0.4rem',
+            }}>
+              {f}
+            </code>
+          ))}
+        </div>
+        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+          Prices are in cents — divide by 100 for display.
+        </div>
+      </RefSection>
+
+      {/* ── HTML Snippets ───────────────────────────────────────────────── */}
+      <RefSection title="HTML Snippets">
+        <RefRow label="Product link">
+          <CopyBlock text={`<a href="${storeUrl}/products/{id}">View Product</a>`} />
+        </RefRow>
+        <RefRow label="Product image">
+          <CopyBlock text={`<img src="{image_url}" alt="{name}" />`} />
+        </RefRow>
+        <RefRow label="Add to cart link">
+          <CopyBlock text={`<a href="${storeUrl}/products/{id}">Add to Cart</a>`} />
+        </RefRow>
+        <RefRow label="Browse all link">
+          <CopyBlock text={`<a href="${storeUrl}/products">Shop Now</a>`} />
+        </RefRow>
+      </RefSection>
+
+      {/* ── Fetch example ───────────────────────────────────────────────── */}
+      <RefSection title="JavaScript Example">
+        <CopyBlock text={`<script>
+fetch('${apiBase}/products?slug=${slug}')
+  .then(r => r.json())
+  .then(data => {
+    data.products.forEach(p => {
+      document.getElementById('grid')
+        .innerHTML += \`
+          <div>
+            <img src="\${p.image_url}" />
+            <h3>\${p.name}</h3>
+            <p>$\${(p.price_cents/100).toFixed(2)}</p>
+            <a href="${storeUrl}/products/\${p.id}">
+              View
+            </a>
+          </div>\`;
+    });
+  });
+</script>`} />
+      </RefSection>
+
+      {/* ── Cart integration note ───────────────────────────────────────── */}
+      <div style={{
+        background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px',
+        padding: '0.65rem 0.75rem', fontSize: '0.7rem', color: '#1e40af', lineHeight: 1.5,
+        marginTop: '0.25rem',
+      }}>
+        <strong>Cart tip:</strong> Link customers to individual product pages
+        ({storeUrl}/products/&#123;id&#125;) where they can use the built-in &ldquo;Add to Cart&rdquo;
+        button, or link directly to the cart page.
+      </div>
+    </div>
+  );
+}
+
+/** Section heading inside the embed reference panel */
+function RefSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: '1rem' }}>
+      <div style={{
+        fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.4rem',
+        textTransform: 'uppercase', letterSpacing: '0.04em',
+      }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Label + child pair in the embed reference */
+function RefRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.2rem' }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+/** Copyable code block with a small copy button */
+function CopyBlock({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <div style={{
+      position: 'relative', background: '#1e293b', color: '#e2e8f0', borderRadius: '6px',
+      padding: '0.5rem 0.65rem', fontFamily: 'monospace', fontSize: '0.7rem',
+      lineHeight: 1.5, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    }}>
+      <button
+        onClick={handleCopy}
+        style={{
+          position: 'absolute', top: '4px', right: '4px', background: 'rgba(255,255,255,0.1)',
+          border: 'none', borderRadius: '4px', color: copied ? '#4ade80' : '#94a3b8',
+          cursor: 'pointer', fontSize: '0.6rem', padding: '0.2rem 0.4rem',
+          transition: 'color 0.15s',
+        }}
+        title="Copy to clipboard"
+      >
+        {copied ? '✓' : 'Copy'}
+      </button>
+      {text}
+    </div>
+  );
+}
+
+const codeInline: React.CSSProperties = {
+  background: '#f1f5f9', padding: '0.1rem 0.35rem', borderRadius: '3px',
+  fontFamily: 'monospace', fontSize: '0.75rem', color: '#334155',
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Shared Components
