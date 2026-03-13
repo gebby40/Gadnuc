@@ -145,3 +145,35 @@ usersRouter.patch('/:id', requireRole('tenant_admin'), async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// DELETE /api/users/:id — remove user (tenant_admin+)
+usersRouter.delete('/:id', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      // Look up the target user first
+      const { rows: [target] } = await db.query(
+        'SELECT id, auth_user_id, username FROM users WHERE id = $1',
+        [req.params.id],
+      );
+      if (!target) { res.status(404).json({ error: 'User not found' }); return; }
+
+      // Prevent self-deletion
+      if (target.auth_user_id === req.user!.userId) {
+        res.status(400).json({ error: 'You cannot delete your own account' });
+        return;
+      }
+
+      await db.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+      res.status(204).send();
+
+      logAuditEvent({ req, action: 'user.deleted', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { deleted_user_id: req.params.id, username: target.username } });
+
+      emitWebhookEvent(req.user!.tenantId, 'user.deleted', {
+        user_id: req.params.id, username: target.username,
+      }).catch(() => {});
+    });
+  } catch (err) {
+    console.error('[users] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
