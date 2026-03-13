@@ -278,6 +278,7 @@ function mapWooCommerceRow(wc: Record<string, string>): z.infer<typeof productSc
     sale_start:  wc['Date sale price starts'] || wc['sale_start'] || null,
     sale_end:    wc['Date sale price ends']   || wc['sale_end']   || null,
     wholesale_price_cents: wc['Wholesale price'] ? Math.round(parseFloat(wc['Wholesale price']) * 100) : null,
+    wholesale_only: (wc['Wholesale only'] || wc['wholesale_only'] || '0') === '1' || (wc['Wholesale only'] || wc['wholesale_only'] || 'false') === 'true',
   };
 }
 
