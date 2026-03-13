@@ -21,6 +21,7 @@ import { stripeConnectRouter }  from './routes/stripe-connect.js';
 import { webhooksRouter }       from './routes/webhooks.js';
 import { apiKeysRouter }        from './routes/api-keys.js';
 import { authDiscoverRouter }   from './routes/auth-discover.js';
+import { getMessagingIO }       from './services/messaging-socket.js';
 import { featureGuard }         from '@gadnuc/feature-flags';
 import { tenantRateLimit }      from './middleware/tenant-rate-limit.js';
 import { globalErrorHandler }   from './middleware/error-handler.js';
@@ -129,6 +130,19 @@ export function createApp() {
     updatePoolGauges(getPoolStats().primary);
     res.set('Content-Type', register.contentType);
     res.end(await register.metrics());
+  });
+
+  // ── Socket.IO polling pass-through (before tenant resolution) ──────
+  // When Socket.IO polling is proxied through Next.js, requests arrive via
+  // Express rather than the raw HTTP server.  Forward them to Socket.IO's
+  // engine so it can handle its own auth.
+  app.use('/api/ws/messaging', (req, res, next) => {
+    const io = getMessagingIO();
+    if (io) {
+      io.engine.handleRequest(req, res);
+    } else {
+      next();
+    }
   });
 
   // ── Slug-less tenant login (before tenant resolution — no slug needed) ──
