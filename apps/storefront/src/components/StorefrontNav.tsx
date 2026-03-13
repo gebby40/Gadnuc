@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
-  const { totalItems } = useCart();
+  const { totalItems, openDrawer } = useCart();
   const router = useRouter();
   const pathname = usePathname();
   const isDashboard = pathname.includes('/dashboard');
@@ -106,12 +106,12 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
             Shop
           </Link>
 
-          {/* Cart icon (hidden on dashboard pages) */}
+          {/* Cart icon — opens mini-cart drawer (hidden on dashboard pages) */}
           {!isDashboard && (
-            <Link
-              href={`${base}/cart`}
+            <button
+              onClick={openDrawer}
               className="relative hover:opacity-75 transition-opacity"
-              style={{ color: 'var(--color-nav-text)', textDecoration: 'none' }}
+              style={{ background: 'none', border: 'none', color: 'var(--color-nav-text)', cursor: 'pointer', padding: 0 }}
               aria-label="Cart"
             >
               <svg
@@ -140,7 +140,7 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
                   {totalItems > 99 ? '99+' : totalItems}
                 </span>
               )}
-            </Link>
+            </button>
           )}
 
           {/* Mobile menu toggle */}

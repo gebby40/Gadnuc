@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense }         from 'react';
 import { getProducts, getCategories } from '@/lib/tenant-api';
-import { ProductGrid }    from '@/components/ProductGrid';
+import { ViewToggle }     from '@/components/ViewToggle';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { SortDropdown }   from '@/components/SortDropdown';
 
@@ -121,8 +121,8 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
         </div>
       )}
 
-      {/* Product grid */}
-      <ProductGrid products={products} tenantSlug={slug} />
+      {/* Product grid / table (toggleable) */}
+      <ViewToggle products={products} tenantSlug={slug} />
 
       {/* Pagination */}
       {meta.totalPages > 1 && (

@@ -2,9 +2,11 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useReducer,
+  useState,
   type ReactNode,
 } from 'react';
 
@@ -78,6 +80,9 @@ interface CartContextValue {
   removeItem:  (productId: string) => void;
   updateQty:   (productId: string, quantity: number) => void;
   clearCart:   () => void;
+  drawerOpen:  boolean;
+  openDrawer:  () => void;
+  closeDrawer: () => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -121,16 +126,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const totalItems = state.items.reduce((sum, i) => sum + i.quantity, 0);
   const totalCents = state.items.reduce((sum, i) => sum + i.priceCents * i.quantity, 0);
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const openDrawer  = useCallback(() => setDrawerOpen(true), []);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
   return (
     <CartContext.Provider
       value={{
         items:      state.items,
         totalItems,
         totalCents,
-        addItem:    (item) => dispatch({ type: 'ADD', item }),
+        addItem:    (item) => { dispatch({ type: 'ADD', item }); setDrawerOpen(true); },
         removeItem: (id)   => dispatch({ type: 'REMOVE', productId: id }),
         updateQty:  (id, q) => dispatch({ type: 'UPDATE', productId: id, quantity: q }),
         clearCart:  ()     => dispatch({ type: 'CLEAR' }),
+        drawerOpen,
+        openDrawer,
+        closeDrawer,
       }}
     >
       {children}

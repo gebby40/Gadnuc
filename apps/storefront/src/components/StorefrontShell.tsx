@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useAuth } from './AuthProvider';
 import { AdminSidebar } from './AdminSidebar';
+import { MiniCartDrawer } from './MiniCartDrawer';
 
 interface Props {
   slug: string;
@@ -58,6 +59,7 @@ export function StorefrontShell({ slug, nav, footer, children }: Props) {
   return (
     <>
       {nav}
+      <MiniCartDrawer slug={slug} />
       <main className="flex-1" style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
         {children}
       </main>
