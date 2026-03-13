@@ -16,6 +16,9 @@ COPY tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/server-manager/ ./apps/server-manager/
 
+# Cache buster — change this value to force a fresh build layer
+ARG CACHEBUST=1
+
 RUN npm run build -w packages/db && npm run build -w packages/auth && \
     npm run build -w packages/tenant && npm run build -w packages/feature-flags && \
     npm run build -w apps/server-manager

@@ -4,6 +4,17 @@ import { randomUUID } from 'node:crypto';
 import { requireAuth, requireRole, hashPassword } from '@gadnuc/auth';
 import { getPool, purgeAllTenantData, provisionTenantSchema, withTenantSchema } from '@gadnuc/db';
 import { invalidateTenantCache } from '@gadnuc/tenant';
+import Stripe from 'stripe';
+
+// ── Stripe client (lazy init — may not be configured in all envs) ────────────
+
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe | null {
+  if (!_stripe && process.env.STRIPE_SECRET_KEY) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
+  }
+  return _stripe;
+}
 
 export const tenantsRouter = Router();
 tenantsRouter.use(requireAuth, requireRole('super_admin'));
@@ -304,7 +315,7 @@ tenantsRouter.delete('/:id', async (req, res) => {
   try {
     // Record the erasure request before deleting (permanent audit trail)
     const { rows: [existing] } = await pool.query(
-      'SELECT slug FROM public.tenants WHERE id = $1',
+      'SELECT slug, stripe_subscription_id, stripe_connect_account_id FROM public.tenants WHERE id = $1',
       [req.params.id],
     );
     if (!existing) { res.status(404).json({ error: 'Tenant not found' }); return; }
@@ -316,6 +327,30 @@ tenantsRouter.delete('/:id', async (req, res) => {
        VALUES ($1, $2, $3, $4)`,
       [req.params.id, existing.slug, String(requestedBy), req.body?.reason ?? null],
     );
+
+    // Cancel Stripe subscription before purging data (non-fatal)
+    const stripe = getStripe();
+    if (stripe && existing.stripe_subscription_id) {
+      try {
+        await stripe.subscriptions.cancel(existing.stripe_subscription_id);
+        console.log(`[tenants] Cancelled Stripe subscription ${existing.stripe_subscription_id} for ${existing.slug}`);
+      } catch (err) {
+        console.warn(`[tenants] Stripe subscription cancel failed (non-fatal):`, (err as Error).message);
+      }
+    }
+
+    // Deauthorize Stripe Connect account (non-fatal)
+    if (stripe && existing.stripe_connect_account_id) {
+      try {
+        await stripe.oauth.deauthorize({
+          client_id: process.env.STRIPE_CLIENT_ID ?? '',
+          stripe_user_id: existing.stripe_connect_account_id,
+        });
+        console.log(`[tenants] Deauthorized Stripe Connect ${existing.stripe_connect_account_id} for ${existing.slug}`);
+      } catch (err) {
+        console.warn(`[tenants] Stripe Connect deauthorize failed (non-fatal):`, (err as Error).message);
+      }
+    }
 
     // Purge all data (schema + public rows)
     const { slug } = await purgeAllTenantData(pool, req.params.id);
