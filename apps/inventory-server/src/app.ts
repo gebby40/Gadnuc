@@ -21,6 +21,7 @@ import { stripeConnectRouter }  from './routes/stripe-connect.js';
 import { webhooksRouter }       from './routes/webhooks.js';
 import { apiKeysRouter }        from './routes/api-keys.js';
 import { authDiscoverRouter }   from './routes/auth-discover.js';
+import { accountRouter }        from './routes/account.js';
 import { getMessagingIO }       from './services/messaging-socket.js';
 import { featureGuard }         from '@gadnuc/feature-flags';
 import { tenantRateLimit }      from './middleware/tenant-rate-limit.js';
@@ -166,6 +167,7 @@ export function createApp() {
   app.use('/api/stripe-connect', stripeConnectRouter);
   app.use('/api/webhooks',       webhooksRouter);
   app.use('/api/api-keys',       apiKeysRouter);
+  app.use('/api/account',        accountRouter);
 
   // ── 404 ──────────────────────────────────────────────────────────────
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));

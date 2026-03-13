@@ -39,6 +39,7 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
         { href: `${base}/dashboard/pricing/customer-groups`,  label: 'Customer Groups' },
       ],
     },
+    { href: `${base}/dashboard/account`, label: 'Account' },
   ];
 
   const storeItems: NavItem[] = [
