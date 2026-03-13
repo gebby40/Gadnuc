@@ -10,6 +10,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '@/components/AuthProvider';
+import { decodeTokenPayload } from '@/lib/auth';
 import {
   loginOperator, saveToken, loadToken, clearToken,
   fetchRooms, fetchMessages, markRead, getSocket, disconnectSocket,
@@ -179,6 +181,8 @@ interface Props {
 }
 
 export function WorkspaceChat({ slug }: Props) {
+  const { token: authToken, user: authUser, isLoading: authLoading, login: authLogin, logout: authLogout } = useAuth();
+
   const [token,         setToken]         = useState<string | null>(null);
   const [myEmail,       setMyEmail]       = useState('');
   const [rooms,         setRooms]         = useState<Room[]>([]);
@@ -195,11 +199,18 @@ export function WorkspaceChat({ slug }: Props) {
   const inputRef   = useRef<HTMLInputElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── On mount: check for stored token ───────────────────────────────────────
+  // ── Sync with AuthProvider (single sign-on) ────────────────────────────────
   useEffect(() => {
-    const stored = loadToken();
-    if (stored) setToken(stored);
-  }, []);
+    if (authLoading) return;
+    if (authToken) {
+      setToken(authToken);
+      if (authUser?.email) setMyEmail(authUser.email);
+    } else {
+      // Fallback: check workspace-specific stored token (direct access w/o dashboard)
+      const stored = loadToken();
+      if (stored) setToken(stored);
+    }
+  }, [authToken, authUser, authLoading]);
 
   // ── Connect socket + load rooms once we have a token ───────────────────────
   useEffect(() => {
@@ -327,14 +338,29 @@ export function WorkspaceChat({ slug }: Props) {
     setRooms([]);
     setMessages([]);
     setActiveRoom(null);
+    authLogout(); // Also clear main auth (single sign-out)
   }
 
   // ── Login gate ──────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
+      </div>
+    );
+  }
+
   if (!token) {
     return (
       <LoginForm
         slug={slug}
-        onLogin={(t, email) => { setToken(t); setMyEmail(email); }}
+        onLogin={(t, email) => {
+          setToken(t);
+          setMyEmail(email);
+          // Sync with AuthProvider so dashboard also gets the session
+          const decoded = decodeTokenPayload(t);
+          if (decoded) authLogin(t, decoded);
+        }}
       />
     );
   }
