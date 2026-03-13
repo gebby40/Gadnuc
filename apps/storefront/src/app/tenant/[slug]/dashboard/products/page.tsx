@@ -126,7 +126,7 @@ export default function ProductListPage() {
         if (res.data.length < batchSize) break;
         offset += batchSize;
       }
-      const { generateCatalogPdf } = await import('../../../../../../lib/generate-catalog-pdf');
+      const { generateCatalogPdf } = await import('@/lib/generate-catalog-pdf');
       generateCatalogPdf(allProducts);
     } catch (err) {
       console.error('PDF export failed:', err);
