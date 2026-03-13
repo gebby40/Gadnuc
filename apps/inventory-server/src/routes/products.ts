@@ -323,7 +323,7 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
       return;
     }
     // Fall through to standard import with mapped rows + any map errors stored
-    (req as Record<string, unknown>)._wcMapErrors = mapErrors;
+    (req as unknown as Record<string, unknown>)._wcMapErrors = mapErrors;
   }
 
   const importSchema = z.object({
@@ -434,7 +434,7 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
     });
 
     // Include WC mapping errors if present
-    const wcMapErrors = (req as Record<string, unknown>)._wcMapErrors as { row: number; error: string }[] | undefined;
+    const wcMapErrors = (req as unknown as Record<string, unknown>)._wcMapErrors as { row: number; error: string }[] | undefined;
     if (wcMapErrors?.length) {
       results.errors.push(...wcMapErrors);
     }
