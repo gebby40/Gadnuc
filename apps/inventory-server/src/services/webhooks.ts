@@ -7,7 +7,7 @@
  * Event types follow a `resource.action` naming convention:
  *   order.created, order.updated, order.shipped, order.cancelled, order.refunded
  *   product.created, product.updated, product.deleted
- *   user.created, user.updated, user.deactivated
+ *   user.created, user.updated, user.deleted, user.deactivated
  *   inventory.low_stock
  *   messaging.room_created, messaging.message_sent
  *
@@ -39,6 +39,7 @@ export const WEBHOOK_EVENTS = [
   'product.deleted',
   'user.created',
   'user.updated',
+  'user.deleted',
   'user.deactivated',
   'inventory.low_stock',
   'messaging.room_created',
