@@ -36,6 +36,8 @@ export interface StorefrontSettings {
   seo_title?:        string | null;
   seo_description?:  string | null;
   custom_css?:       string | null;
+  custom_homepage_enabled?: boolean;
+  custom_homepage_url?:     string | null;
 }
 
 export const getTenantSettings = cache(async (slug: string): Promise<StorefrontSettings> => {
