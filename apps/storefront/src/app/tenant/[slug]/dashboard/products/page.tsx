@@ -43,6 +43,7 @@ export default function ProductListPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categories, setCategories] = useState<string[]>([]);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const fetchProducts = useCallback(async () => {
     if (!token) return;
@@ -112,6 +113,28 @@ export default function ProductListPage() {
     }
   }
 
+  async function handleExportPdf() {
+    if (!token) return;
+    setExportingPdf(true);
+    try {
+      let allProducts: Product[] = [];
+      let offset = 0;
+      const batchSize = 200;
+      while (true) {
+        const res = await tenantGet<ProductsResponse>(slug, token, `/api/products?limit=${batchSize}&offset=${offset}`);
+        allProducts.push(...res.data);
+        if (res.data.length < batchSize) break;
+        offset += batchSize;
+      }
+      const { generateCatalogPdf } = await import('../../../../../../lib/generate-catalog-pdf');
+      generateCatalogPdf(allProducts);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   function formatPrice(cents: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
   }
@@ -131,6 +154,9 @@ export default function ProductListPage() {
         {canManage && (
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={handleExport} style={secondaryBtnStyle}>Export CSV</button>
+            <button onClick={handleExportPdf} disabled={exportingPdf} style={{ ...secondaryBtnStyle, opacity: exportingPdf ? 0.6 : 1, cursor: exportingPdf ? 'wait' : 'pointer' }}>
+              {exportingPdf ? 'Exporting…' : 'Export PDF'}
+            </button>
             <button onClick={() => router.push(`/tenant/${slug}/dashboard/products/import`)} style={secondaryBtnStyle}>
               Import CSV
             </button>
