@@ -56,15 +56,24 @@ export const getTenantSettings = cache(async (slug: string): Promise<StorefrontS
 
 // ── Products ──────────────────────────────────────────────────────────────────
 export interface Product {
-  id:          string;
-  sku:         string;
-  name:        string;
-  description: string | null;
-  category:    string | null;
-  price_cents: number;
-  stock_qty:   number;
-  image_url:   string | null;
-  metadata:    Record<string, unknown>;
+  id:               string;
+  sku:              string;
+  name:             string;
+  description:      string | null;
+  category:         string | null;
+  price_cents:      number;
+  sale_price_cents: number | null;
+  stock_qty:        number;
+  image_url:        string | null;
+  metadata:         Record<string, unknown>;
+  weight_oz:        number | null;
+  length_in:        number | null;
+  width_in:         number | null;
+  height_in:        number | null;
+  shipping_class:   string;
+  tags:             string[];
+  brand:            string | null;
+  is_featured:      boolean;
 }
 
 export interface ProductListMeta {
@@ -129,6 +138,24 @@ export const getCategories = cache(async (slug: string): Promise<string[]> => {
     return [];
   }
 });
+
+// ── Related Products ─────────────────────────────────────────────────────────
+export async function getRelatedProducts(
+  slug: string,
+  productId: string,
+  category: string | null,
+  limit = 4,
+): Promise<Product[]> {
+  if (!category) return [];
+  const result = await getProducts(slug, { category, limit: limit + 1 });
+  return result.data.filter((p) => p.id !== productId).slice(0, limit);
+}
+
+// ── Featured / New Arrivals ──────────────────────────────────────────────────
+export async function getNewArrivals(slug: string, limit = 4): Promise<Product[]> {
+  const result = await getProducts(slug, { limit, sort: 'newest' });
+  return result.data;
+}
 
 // Backwards-compatible: used by existing homepage page.tsx
 export interface TenantInfo {

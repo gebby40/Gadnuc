@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { notFound }  from 'next/navigation';
 import Image         from 'next/image';
 import Link          from 'next/link';
-import { getProduct } from '@/lib/tenant-api';
+import { getProduct, getRelatedProducts } from '@/lib/tenant-api';
 import { AddToCartButton } from '@/components/AddToCartButton';
+import { ProductGrid }     from '@/components/ProductGrid';
 
 interface PageProps {
   params: { slug: string; id: string };
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!product) return { title: 'Product Not Found' };
   return {
     title:       product.name,
-    description: product.description ?? undefined,
+    description: product.description?.replace(/<[^>]*>/g, '').slice(0, 160) ?? undefined,
   };
 }
 
@@ -28,6 +29,35 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   const inStock     = product.stock_qty > 0;
   const lowStock    = inStock && product.stock_qty <= 5;
+  const onSale      = product.sale_price_cents != null && product.sale_price_cents < product.price_cents;
+  const displayPrice = onSale ? product.sale_price_cents! : product.price_cents;
+
+  // Related products (same category)
+  const related = await getRelatedProducts(params.slug, product.id, product.category);
+
+  // Build attributes list from metadata + product fields
+  const attributes: { label: string; value: string }[] = [];
+  if (product.brand) attributes.push({ label: 'Brand', value: product.brand });
+  if (product.weight_oz) attributes.push({ label: 'Weight', value: `${product.weight_oz} oz` });
+  if (product.length_in || product.width_in || product.height_in) {
+    const dims = [product.length_in, product.width_in, product.height_in]
+      .filter(Boolean)
+      .map((d) => `${d}"`)
+      .join(' × ');
+    if (dims) attributes.push({ label: 'Dimensions', value: dims });
+  }
+  if (product.shipping_class && product.shipping_class !== 'standard') {
+    attributes.push({ label: 'Shipping', value: product.shipping_class });
+  }
+  // Add metadata key-value pairs
+  for (const [key, val] of Object.entries(product.metadata)) {
+    if (val != null && val !== '') {
+      attributes.push({
+        label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: String(val),
+      });
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
@@ -79,6 +109,15 @@ export default async function ProductDetailPage({ params }: PageProps) {
               📦
             </div>
           )}
+          {/* Sale badge */}
+          {onSale && (
+            <span
+              className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold"
+              style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-fg)' }}
+            >
+              Sale
+            </span>
+          )}
         </div>
 
         {/* Details */}
@@ -96,15 +135,26 @@ export default async function ProductDetailPage({ params }: PageProps) {
             {product.name}
           </h1>
 
-          {/* SKU */}
+          {/* SKU + Brand */}
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
             SKU: {product.sku}
+            {product.brand && <span className="ml-3">Brand: {product.brand}</span>}
           </p>
 
           {/* Price */}
-          <p className="text-4xl font-extrabold" style={{ color: 'var(--color-primary)' }}>
-            {formatPrice(product.price_cents)}
-          </p>
+          <div className="flex items-baseline gap-3">
+            <span className="text-4xl font-extrabold" style={{ color: 'var(--color-primary)' }}>
+              {formatPrice(displayPrice)}
+            </span>
+            {onSale && (
+              <span
+                className="text-xl line-through"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                {formatPrice(product.price_cents)}
+              </span>
+            )}
+          </div>
 
           {/* Stock status */}
           <p
@@ -116,14 +166,41 @@ export default async function ProductDetailPage({ params }: PageProps) {
             {lowStock && `⚠ Low Stock — only ${product.stock_qty} left`}
           </p>
 
-          {/* Description */}
+          {/* Tags */}
+          {product.tags && product.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {product.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 rounded-full text-xs"
+                  style={{
+                    background: 'var(--color-bg-secondary)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Description — render as HTML if it contains tags, otherwise plain text */}
           {product.description && (
-            <p
-              className="leading-relaxed text-sm"
-              style={{ color: 'var(--color-text-muted)' }}
-            >
-              {product.description}
-            </p>
+            product.description.includes('<') ? (
+              <div
+                className="leading-relaxed text-sm prose prose-sm max-w-none"
+                style={{ color: 'var(--color-text-muted)' }}
+                dangerouslySetInnerHTML={{ __html: product.description }}
+              />
+            ) : (
+              <p
+                className="leading-relaxed text-sm"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                {product.description}
+              </p>
+            )
           )}
 
           {/* Add to Cart */}
@@ -131,13 +208,13 @@ export default async function ProductDetailPage({ params }: PageProps) {
             <AddToCartButton
               productId={product.id}
               name={product.name}
-              priceCents={product.price_cents}
+              priceCents={displayPrice}
               imageUrl={product.image_url}
               inStock={inStock}
             />
           </div>
 
-          {/* View cart link (shown after adding) */}
+          {/* View cart link */}
           <Link
             href={`/tenant/${params.slug}/cart`}
             className="text-sm text-center"
@@ -147,6 +224,58 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      {/* Product Attributes / Additional Information */}
+      {attributes.length > 0 && (
+        <section className="mt-12">
+          <h2
+            className="text-lg font-bold mb-4"
+            style={{ color: 'var(--color-text)', fontFamily: 'var(--font-heading)' }}
+          >
+            Additional Information
+          </h2>
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ border: '1px solid var(--color-border)' }}
+          >
+            <table className="w-full text-sm">
+              <tbody>
+                {attributes.map((attr, i) => (
+                  <tr
+                    key={attr.label}
+                    style={{
+                      background: i % 2 === 0 ? 'var(--color-bg-secondary)' : 'transparent',
+                    }}
+                  >
+                    <td
+                      className="px-4 py-2.5 font-medium"
+                      style={{ color: 'var(--color-text)', width: '35%' }}
+                    >
+                      {attr.label}
+                    </td>
+                    <td className="px-4 py-2.5" style={{ color: 'var(--color-text-muted)' }}>
+                      {attr.value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Related Products */}
+      {related.length > 0 && (
+        <section className="mt-12">
+          <h2
+            className="text-lg font-bold mb-6"
+            style={{ color: 'var(--color-text)', fontFamily: 'var(--font-heading)' }}
+          >
+            Related Products
+          </h2>
+          <ProductGrid products={related} tenantSlug={params.slug} />
+        </section>
+      )}
     </div>
   );
 }

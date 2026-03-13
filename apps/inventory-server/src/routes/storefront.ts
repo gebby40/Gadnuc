@@ -167,7 +167,9 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
       // Data query
       params.push(limitNum, offset);
       const { rows } = await db.query(
-        `SELECT id, sku, name, description, category, price_cents, stock_qty, image_url, metadata
+        `SELECT id, sku, name, description, category, price_cents, sale_price_cents,
+                stock_qty, image_url, metadata, weight_oz, length_in, width_in,
+                height_in, shipping_class, tags, brand, is_featured
          FROM products
          WHERE ${where}
          ORDER BY ${orderBy}
@@ -200,8 +202,10 @@ storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
   try {
     const row = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query(
-        `SELECT id, sku, name, description, category, price_cents, stock_qty,
-                low_stock_threshold, image_url, metadata
+        `SELECT id, sku, name, description, category, price_cents, sale_price_cents,
+                stock_qty, low_stock_threshold, image_url, metadata,
+                weight_oz, length_in, width_in, height_in, shipping_class,
+                tags, brand, is_featured
          FROM products
          WHERE id = $1 AND is_active = true`,
         [req.params.id],

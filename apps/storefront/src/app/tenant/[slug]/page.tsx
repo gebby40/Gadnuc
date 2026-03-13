@@ -6,17 +6,23 @@
  * we render that in a full-width sandboxed iframe instead of the
  * auto-generated hero + product grid.
  */
-import { getTenantStorefront } from '@/lib/tenant-api';
-import { HeroSection }  from '@/components/HeroSection';
-import { ProductGrid }  from '@/components/ProductGrid';
-import Link             from 'next/link';
+import { getTenantStorefront, getCategories, getNewArrivals } from '@/lib/tenant-api';
+import { HeroSection }    from '@/components/HeroSection';
+import { CategoryCards }   from '@/components/CategoryCards';
+import { NewArrivals }     from '@/components/NewArrivals';
+import { ProductGrid }     from '@/components/ProductGrid';
+import Link                from 'next/link';
 
 interface PageProps {
   params: { slug: string };
 }
 
 export default async function TenantHomePage({ params }: PageProps) {
-  const { settings, products } = await getTenantStorefront(params.slug);
+  const [{ settings, products }, categories, newArrivals] = await Promise.all([
+    getTenantStorefront(params.slug),
+    getCategories(params.slug),
+    getNewArrivals(params.slug, 4),
+  ]);
 
   // ── Custom homepage: render iframe ────────────────────────────────────────
   if (settings.custom_homepage_enabled && settings.custom_homepage_url) {
@@ -47,6 +53,13 @@ export default async function TenantHomePage({ params }: PageProps) {
         enabled={settings.hero_enabled !== false}
       />
 
+      {/* Category CTA Cards */}
+      <CategoryCards categories={categories} tenantSlug={params.slug} />
+
+      {/* New Arrivals */}
+      <NewArrivals products={newArrivals} tenantSlug={params.slug} />
+
+      {/* Featured Products */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>

@@ -30,66 +30,90 @@ export function ProductGrid({ products, tenantSlug }: Props) {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-6 sm:gap-x-5 sm:gap-y-8">
-      {products.map((product) => (
-        <Link
-          key={product.id}
-          href={`/tenant/${tenantSlug}/products/${product.id}`}
-          className="block"
-          style={{ textDecoration: 'none', color: 'inherit' }}
-        >
-          <article className="group cursor-pointer">
-            {/* Square thumbnail — object-contain keeps full image visible */}
-            <div
-              className="relative overflow-hidden mb-2 sm:mb-3 p-3"
-              style={{
-                aspectRatio: '1 / 1',
-                background: 'var(--color-bg-secondary)',
-                borderRadius: 'var(--radius-card)',
-              }}
-            >
-              {product.image_url ? (
-                <Image
-                  src={product.image_url}
-                  alt={product.name}
-                  fill
-                  sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 260px"
-                  className="object-contain p-2 group-hover:scale-105 transition-transform duration-500 ease-out"
-                  quality={80}
-                />
-              ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl"
-                  style={{ color: 'var(--color-border)' }}
-                >
-                  📦
-                </div>
-              )}
-              {product.stock_qty === 0 && (
-                <div
-                  className="absolute inset-0 flex items-center justify-center text-xs sm:text-sm font-semibold tracking-wide uppercase"
-                  style={{ background: 'rgba(0,0,0,0.5)', color: '#fff' }}
-                >
-                  Sold Out
-                </div>
-              )}
-            </div>
+      {products.map((product) => {
+        const onSale = product.sale_price_cents != null && product.sale_price_cents < product.price_cents;
+        const displayPrice = onSale ? product.sale_price_cents! : product.price_cents;
 
-            {/* Product info */}
-            <h3
-              className="font-medium text-xs sm:text-sm mb-0.5 line-clamp-2 leading-snug"
-              style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}
-            >
-              {product.name}
-            </h3>
-            <span
-              className="text-xs sm:text-sm font-semibold"
-              style={{ color: 'var(--color-text)' }}
-            >
-              {formatPrice(product.price_cents)}
-            </span>
-          </article>
-        </Link>
-      ))}
+        return (
+          <Link
+            key={product.id}
+            href={`/tenant/${tenantSlug}/products/${product.id}`}
+            className="block"
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
+            <article className="group cursor-pointer">
+              {/* Square thumbnail — object-contain keeps full image visible */}
+              <div
+                className="relative overflow-hidden mb-2 sm:mb-3 p-3"
+                style={{
+                  aspectRatio: '1 / 1',
+                  background: 'var(--color-bg-secondary)',
+                  borderRadius: 'var(--radius-card)',
+                }}
+              >
+                {product.image_url ? (
+                  <Image
+                    src={product.image_url}
+                    alt={product.name}
+                    fill
+                    sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 260px"
+                    className="object-contain p-2 group-hover:scale-105 transition-transform duration-500 ease-out"
+                    quality={80}
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl"
+                    style={{ color: 'var(--color-border)' }}
+                  >
+                    📦
+                  </div>
+                )}
+                {product.stock_qty === 0 && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center text-xs sm:text-sm font-semibold tracking-wide uppercase"
+                    style={{ background: 'rgba(0,0,0,0.5)', color: '#fff' }}
+                  >
+                    Sold Out
+                  </div>
+                )}
+                {/* Sale badge */}
+                {onSale && product.stock_qty > 0 && (
+                  <span
+                    className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold"
+                    style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-accent-fg)' }}
+                  >
+                    Sale
+                  </span>
+                )}
+              </div>
+
+              {/* Product info */}
+              <h3
+                className="font-medium text-xs sm:text-sm mb-0.5 line-clamp-2 leading-snug"
+                style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}
+              >
+                {product.name}
+              </h3>
+              <div className="flex items-baseline gap-1.5">
+                <span
+                  className="text-xs sm:text-sm font-semibold"
+                  style={{ color: 'var(--color-text)' }}
+                >
+                  {formatPrice(displayPrice)}
+                </span>
+                {onSale && (
+                  <span
+                    className="text-[10px] sm:text-xs line-through"
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    {formatPrice(product.price_cents)}
+                  </span>
+                )}
+              </div>
+            </article>
+          </Link>
+        );
+      })}
     </div>
   );
 }
