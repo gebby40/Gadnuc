@@ -17,6 +17,7 @@ export interface AuthUser {
   role: string;
   tenantSlug: string;
   tenantId: string;
+  isWholesale?: boolean;
 }
 
 export interface LoginSuccess {
@@ -181,6 +182,7 @@ export function decodeTokenPayload(token: string): AuthUser | null {
       role:       payload.role ?? '',
       tenantSlug: payload.tenantSlug ?? '',
       tenantId:   payload.tenantId ?? '',
+      isWholesale: payload.isWholesale ?? false,
     };
   } catch {
     return null;

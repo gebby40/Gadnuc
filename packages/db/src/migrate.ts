@@ -23,6 +23,7 @@ const MIGRATION_FILES = [
   '014_discount_rules.sql',
   '015_wholesale_pricing.sql',
   '016_customer_accounts.sql',
+  '017_wholesale_customers.sql',
 ];
 
 export async function runMigrations(pool?: Pool): Promise<void> {

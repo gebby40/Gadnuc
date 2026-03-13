@@ -48,6 +48,7 @@ export async function requireAuth(
           tenantSlug: requestTenantSlug,
           role:       payload.role,
           email:      payload.email,
+          isWholesale: payload.isWholesale ?? false,
         };
         next();
         return;
@@ -62,6 +63,7 @@ export async function requireAuth(
       tenantSlug: payload.tenantSlug,
       role:       payload.role,
       email:      payload.email,
+      isWholesale: payload.isWholesale ?? false,
     };
     next();
   } catch {
@@ -88,6 +90,7 @@ export async function optionalAuth(
         tenantSlug: payload.tenantSlug,
         role:       payload.role,
         email:      payload.email,
+        isWholesale: payload.isWholesale ?? false,
       };
     } catch {
       // Ignore invalid tokens on optional routes

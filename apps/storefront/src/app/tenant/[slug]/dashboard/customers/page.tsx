@@ -14,6 +14,7 @@ interface Customer {
   last_name: string | null;
   phone: string | null;
   is_active: boolean;
+  is_wholesale: boolean;
   last_login_at: string | null;
   created_at: string;
   order_count?: number;
@@ -24,6 +25,7 @@ interface CustomerForm {
   last_name: string;
   phone: string;
   is_active: boolean;
+  is_wholesale: boolean;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -44,7 +46,7 @@ export default function CustomersPage() {
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [form, setForm] = useState<CustomerForm>({ first_name: '', last_name: '', phone: '', is_active: true });
+  const [form, setForm] = useState<CustomerForm>({ first_name: '', last_name: '', phone: '', is_active: true, is_wholesale: false });
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -93,6 +95,7 @@ export default function CustomersPage() {
       last_name: c.last_name ?? '',
       phone: c.phone ?? '',
       is_active: c.is_active,
+      is_wholesale: c.is_wholesale ?? false,
     });
     setModalError('');
     setModalOpen(true);
@@ -115,6 +118,7 @@ export default function CustomersPage() {
       if (form.last_name !== (editingCustomer.last_name ?? '')) body.last_name = form.last_name || undefined;
       if (form.phone !== (editingCustomer.phone ?? '')) body.phone = form.phone || undefined;
       if (form.is_active !== editingCustomer.is_active) body.is_active = form.is_active;
+      if (form.is_wholesale !== (editingCustomer.is_wholesale ?? false)) body.is_wholesale = form.is_wholesale;
 
       if (Object.keys(body).length === 0) {
         closeModal();
@@ -235,6 +239,7 @@ export default function CustomersPage() {
               <th style={thStyle}>Customer</th>
               <th style={thStyle}>Phone</th>
               <th style={{ ...thStyle, textAlign: 'center' }}>Orders</th>
+              <th style={{ ...thStyle, textAlign: 'center' }}>Wholesale</th>
               <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>
               <th style={thStyle}>Registered</th>
               <th style={thStyle}>Last Login</th>
@@ -243,10 +248,10 @@ export default function CustomersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading...</td></tr>
+              <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading...</td></tr>
             ) : customers.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                   {search || statusFilter ? 'No customers match your filters.' : 'No customers have registered yet.'}
                 </td>
               </tr>
@@ -287,6 +292,18 @@ export default function CustomersPage() {
                     }}>
                       {c.order_count ?? 0}
                     </span>
+                  </td>
+                  {/* Wholesale */}
+                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    {c.is_wholesale && (
+                      <span style={{
+                        display: 'inline-block', padding: '0.15rem 0.5rem', borderRadius: '999px',
+                        fontSize: '0.75rem', fontWeight: 600,
+                        background: '#f5f3ff', color: '#7c3aed',
+                      }}>
+                        Wholesale
+                      </span>
+                    )}
                   </td>
                   {/* Status */}
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
@@ -442,6 +459,30 @@ export default function CustomersPage() {
               </button>
               <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
                 {form.is_active ? 'Customer can log in' : 'Customer is deactivated'}
+              </span>
+            </div>
+
+            {/* Wholesale toggle */}
+            <div style={{ ...fieldGroup, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Wholesale</label>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, is_wholesale: !form.is_wholesale })}
+                style={{
+                  width: '44px', height: '24px', borderRadius: '12px', border: 'none',
+                  background: form.is_wholesale ? '#7c3aed' : '#d1d5db', cursor: 'pointer',
+                  position: 'relative', transition: 'background 0.2s',
+                }}
+              >
+                <div style={{
+                  width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: '3px',
+                  left: form.is_wholesale ? '23px' : '3px',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </button>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                {form.is_wholesale ? 'Sees wholesale pricing & products' : 'Standard retail customer'}
               </span>
             </div>
 

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { Suspense }         from 'react';
 import { getProducts, getCategories } from '@/lib/tenant-api';
-import { ViewToggle }     from '@/components/ViewToggle';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { SortDropdown }   from '@/components/SortDropdown';
+import { ProductsDisplay } from './ProductsDisplay';
 
 interface PageProps {
   params:       { slug: string };
@@ -29,21 +29,6 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
   ]);
 
   const { data: products, meta } = productsResult;
-
-  /** Build a query string preserving current filters */
-  function buildQs(overrides: Record<string, string | undefined> = {}): string {
-    const qs = new URLSearchParams();
-    const merged = {
-      category: searchParams.category,
-      search: searchParams.search,
-      sort: searchParams.sort,
-      ...overrides,
-    };
-    Object.entries(merged).forEach(([k, v]) => {
-      if (v) qs.set(k, v);
-    });
-    return qs.toString();
-  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
@@ -90,7 +75,7 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
           </button>
           {searchParams.search && (
             <a
-              href={`?${buildQs({ search: undefined })}`}
+              href={`?${new URLSearchParams(Object.entries({ category: searchParams.category, sort: searchParams.sort }).filter(([, v]) => v) as [string, string][]).toString()}`}
               className="px-4 py-2 rounded-lg text-sm font-medium"
               style={{
                 border: '1px solid var(--color-border)',
@@ -121,29 +106,19 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
         </div>
       )}
 
-      {/* Product grid / table (toggleable) */}
-      <ViewToggle products={products} tenantSlug={slug} />
-
-      {/* Pagination */}
-      {meta.totalPages > 1 && (
-        <div className="mt-12 flex justify-center gap-2 flex-wrap">
-          {Array.from({ length: meta.totalPages }, (_, i) => i + 1).map((p) => (
-            <a
-              key={p}
-              href={`?${buildQs({ page: String(p) })}`}
-              className="w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium"
-              style={{
-                background:     p === page ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
-                color:          p === page ? 'var(--color-primary-fg)' : 'var(--color-text)',
-                border:         '1px solid var(--color-border)',
-                textDecoration: 'none',
-              }}
-            >
-              {p}
-            </a>
-          ))}
-        </div>
-      )}
+      {/* Product grid / table — wholesale-aware client wrapper */}
+      <ProductsDisplay
+        slug={slug}
+        ssrProducts={products}
+        ssrMeta={meta}
+        searchParams={{
+          category: searchParams.category,
+          search: searchParams.search,
+          page,
+          sort,
+        }}
+        currentPage={page}
+      />
     </div>
   );
 }

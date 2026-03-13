@@ -6,6 +6,7 @@ export interface JwtPayload extends JWTPayload {
   tenantSlug: string;  // tenant slug (for schema routing)
   role: string;        // user role within this tenant
   email: string;
+  isWholesale?: boolean; // customer wholesale flag
 }
 
 export interface AuthUser {
@@ -14,6 +15,7 @@ export interface AuthUser {
   tenantSlug: string;
   role: string;
   email: string;
+  isWholesale?: boolean;
 }
 
 function getSecret(): Uint8Array {

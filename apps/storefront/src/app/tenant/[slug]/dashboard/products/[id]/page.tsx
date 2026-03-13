@@ -12,10 +12,12 @@ interface Product {
   description: string | null;
   category: string | null;
   price_cents: number;
+  wholesale_price_cents: number | null;
   stock_qty: number;
   low_stock_threshold: number;
   image_url: string | null;
   is_active: boolean;
+  wholesale_only: boolean;
   metadata: Record<string, unknown>;
 }
 
@@ -28,8 +30,8 @@ export default function EditProductPage() {
 
   const [form, setForm] = useState({
     sku: '', name: '', description: '', category: '',
-    price: '', stock_qty: '0', low_stock_threshold: '10',
-    image_url: '', is_active: true, metadata: '{}',
+    price: '', wholesale_price: '', stock_qty: '0', low_stock_threshold: '10',
+    image_url: '', is_active: true, wholesale_only: false, metadata: '{}',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -49,10 +51,12 @@ export default function EditProductPage() {
           description: p.description ?? '',
           category: p.category ?? '',
           price: (p.price_cents / 100).toFixed(2),
+          wholesale_price: p.wholesale_price_cents != null ? (p.wholesale_price_cents / 100).toFixed(2) : '',
           stock_qty: String(p.stock_qty),
           low_stock_threshold: String(p.low_stock_threshold),
           image_url: p.image_url ?? '',
           is_active: p.is_active,
+          wholesale_only: p.wholesale_only ?? false,
           metadata: JSON.stringify(p.metadata ?? {}, null, 2),
         });
       } catch (err: any) {
@@ -115,16 +119,22 @@ export default function EditProductPage() {
         return;
       }
 
+      const wholesaleCents = form.wholesale_price.trim()
+        ? Math.round(parseFloat(form.wholesale_price) * 100)
+        : null;
+
       await tenantPatch(slug, token!, `/api/products/${productId}`, {
         sku: form.sku,
         name: form.name,
         description: form.description || undefined,
         category: form.category || undefined,
         price_cents: priceCents,
+        wholesale_price_cents: wholesaleCents,
         stock_qty: parseInt(form.stock_qty) || 0,
         low_stock_threshold: parseInt(form.low_stock_threshold) || 10,
         image_url: form.image_url || undefined,
         is_active: form.is_active,
+        wholesale_only: form.wholesale_only,
         metadata,
       });
 
@@ -223,6 +233,20 @@ export default function EditProductPage() {
             <div>
               <label style={labelStyle}>Price (USD) *</label>
               <input type="number" step="0.01" min="0" value={form.price} onChange={e => update('price', e.target.value)} required style={inputStyle} />
+            </div>
+          </div>
+
+          {/* Wholesale Price */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={labelStyle}>Wholesale Price (USD)</label>
+              <input type="number" step="0.01" min="0" value={form.wholesale_price} onChange={e => update('wholesale_price', e.target.value)} style={inputStyle} placeholder="Leave blank for no wholesale price" />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input type="checkbox" id="wholesale_only" checked={form.wholesale_only} onChange={e => update('wholesale_only', e.target.checked)} />
+                <label htmlFor="wholesale_only" style={{ fontSize: '0.85rem', color: '#374151' }}>Wholesale only (hidden from retail)</label>
+              </div>
             </div>
           </div>
 

@@ -77,6 +77,8 @@ export interface Product {
   sale_start:       string | null;
   sale_end:         string | null;
   wholesale_price_cents: number | null;
+  wholesale_only:       boolean;
+  effective_price_cents?: number;
 }
 
 export interface ProductListMeta {
@@ -142,6 +144,64 @@ export const getCategories = cache(async (slug: string): Promise<string[]> => {
   }
 });
 
+// ── Authenticated product fetchers (for wholesale customers) ─────────────────
+
+const CLIENT_API_BASE = process.env.NEXT_PUBLIC_INVENTORY_URL ?? 'http://localhost:3001';
+
+function clientApiUrl(path: string) {
+  return `${CLIENT_API_BASE}${path}`;
+}
+
+export async function getProductsAuthenticated(
+  slug: string,
+  token: string,
+  params: { category?: string; search?: string; page?: number; limit?: number; sort?: string } = {},
+): Promise<ProductListResult> {
+  const qs = new URLSearchParams();
+  if (params.category) qs.set('category', params.category);
+  if (params.search)   qs.set('search',   params.search);
+  if (params.page)     qs.set('page',     String(params.page));
+  if (params.limit)    qs.set('limit',    String(params.limit));
+  if (params.sort)     qs.set('sort',     params.sort);
+
+  try {
+    const res = await fetch(clientApiUrl(`/api/storefront/products?${qs}`), {
+      headers: {
+        'x-tenant-slug': slug,
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return { data: [], meta: { page: 1, limit: 24, total: 0, totalPages: 0 } };
+    return res.json();
+  } catch {
+    return { data: [], meta: { page: 1, limit: 24, total: 0, totalPages: 0 } };
+  }
+}
+
+export async function getProductAuthenticated(
+  slug: string,
+  id: string,
+  token: string,
+): Promise<Product | null> {
+  try {
+    const res = await fetch(clientApiUrl(`/api/storefront/products/${id}`), {
+      headers: {
+        'x-tenant-slug': slug,
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Related Products ─────────────────────────────────────────────────────────
 export async function getRelatedProducts(
   slug: string,
@@ -198,10 +258,15 @@ export async function createCheckoutSession(
   successUrl:    string,
   cancelUrl:     string,
   customerEmail?: string,
+  token?:        string,
 ): Promise<{ url: string; sessionId: string }> {
+  const headers: Record<string, string> = { ...tenantHeaders(slug) as Record<string, string> };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   const res = await fetch(apiUrl('/api/storefront/checkout'), {
     method:  'POST',
-    headers: tenantHeaders(slug),
+    headers,
     body:    JSON.stringify({ items, successUrl, cancelUrl, customerEmail }),
     cache:   'no-store',
   });

@@ -48,7 +48,7 @@ function setCustomerRefreshCookie(res: Response, token: string) {
 
 async function issueCustomerTokenPair(
   res: Response,
-  customer: { id: string; email: string },
+  customer: { id: string; email: string; is_wholesale?: boolean },
   tenantId: string,
   tenantSlug: string,
 ) {
@@ -58,6 +58,7 @@ async function issueCustomerTokenPair(
     tenantSlug,
     role: 'customer',
     email: customer.email,
+    isWholesale: customer.is_wholesale ?? false,
   });
   const refreshToken = generateRefreshToken();
   await storeRefreshToken({ token: refreshToken, userId: customer.id, tenantId });
@@ -95,10 +96,11 @@ const updateProfileSchema = z.object({
 });
 
 const adminUpdateSchema = z.object({
-  first_name: z.string().max(100).optional(),
-  last_name:  z.string().max(100).optional(),
-  phone:      z.string().max(30).optional(),
-  is_active:  z.boolean().optional(),
+  first_name:   z.string().max(100).optional(),
+  last_name:    z.string().max(100).optional(),
+  phone:        z.string().max(30).optional(),
+  is_active:    z.boolean().optional(),
+  is_wholesale: z.boolean().optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,10 +126,10 @@ customersRouter.post('/register', async (req: Request, res: Response) => {
       const { rows } = await db.query(
         `INSERT INTO customers (email, password_hash, first_name, last_name)
          VALUES ($1, $2, $3, $4)
-         RETURNING id, email, first_name, last_name, created_at`,
+         RETURNING id, email, first_name, last_name, is_wholesale, created_at`,
         [email, password_hash, first_name ?? null, last_name ?? null],
       );
-      return rows[0] as { id: string; email: string; first_name: string | null; last_name: string | null; created_at: string };
+      return rows[0] as { id: string; email: string; first_name: string | null; last_name: string | null; is_wholesale: boolean; created_at: string };
     });
 
     const { accessToken } = await issueCustomerTokenPair(res, customer, tenant.id, tenant.slug);
@@ -175,9 +177,9 @@ customersRouter.post('/login', async (req: Request, res: Response) => {
     const customer = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query<{
         id: string; email: string; password_hash: string;
-        first_name: string | null; last_name: string | null; is_active: boolean;
+        first_name: string | null; last_name: string | null; is_active: boolean; is_wholesale: boolean;
       }>(
-        'SELECT id, email, password_hash, first_name, last_name, is_active FROM customers WHERE email = $1 LIMIT 1',
+        'SELECT id, email, password_hash, first_name, last_name, is_active, is_wholesale FROM customers WHERE email = $1 LIMIT 1',
         [email],
       );
       return rows[0] ?? null;
@@ -232,7 +234,7 @@ customersRouter.get('/me', requireAuth, requireRole('customer'), async (req: Req
     await withTenantSchema(req.tenantSlug!, async (db) => {
       const { rows } = await db.query(
         `SELECT id, email, first_name, last_name, phone, default_address,
-                is_active, last_login_at, created_at
+                is_active, is_wholesale, last_login_at, created_at
          FROM customers WHERE id = $1`,
         [req.user!.userId],
       );
@@ -349,7 +351,7 @@ customersRouter.get('/', requireAuth, requireRole('tenant_admin'), async (req: R
       params.push(perPage, offset);
       const { rows } = await db.query(
         `SELECT c.id, c.email, c.first_name, c.last_name, c.phone,
-                c.is_active, c.last_login_at, c.created_at,
+                c.is_active, c.is_wholesale, c.last_login_at, c.created_at,
                 (SELECT COUNT(*)::int FROM orders WHERE customer_id = c.id) AS order_count
          FROM customers c
          WHERE ${where}
@@ -404,7 +406,7 @@ customersRouter.patch('/:id', requireAuth, requireRole('tenant_admin'), async (r
     await withTenantSchema(req.tenantSlug!, async (db) => {
       const { rows } = await db.query(
         `UPDATE customers SET ${setClauses}, updated_at = now() WHERE id = $1
-         RETURNING id, email, first_name, last_name, phone, is_active`,
+         RETURNING id, email, first_name, last_name, phone, is_active, is_wholesale`,
         [req.params.id, ...fields.map(f => (updates as Record<string, unknown>)[f])],
       );
       if (!rows[0]) { res.status(404).json({ error: 'Customer not found' }); return; }

@@ -12,10 +12,12 @@ interface Product {
   description: string | null;
   category: string | null;
   price_cents: number;
+  wholesale_price_cents: number | null;
   stock_qty: number;
   low_stock_threshold: number;
   image_url: string | null;
   is_active: boolean;
+  wholesale_only: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -191,16 +193,17 @@ export default function ProductListPage() {
               <th style={thStyle}>Name</th>
               <th style={thStyle}>Category</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Price</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>W/S Price</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Stock</th>
               <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={canManage ? 8 : 7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading...</td></tr>
+              <tr><td colSpan={canManage ? 9 : 8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading...</td></tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 8 : 7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                <td colSpan={canManage ? 9 : 8} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                   {search || categoryFilter ? 'No products match your filters.' : 'No products yet. Add your first product!'}
                 </td>
               </tr>
@@ -231,6 +234,22 @@ export default function ProductListPage() {
                 <td style={{ ...tdStyle, fontWeight: 600, color: '#0f172a' }}>{p.name}</td>
                 <td style={{ ...tdStyle, color: '#64748b' }}>{p.category ?? '—'}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>{formatPrice(p.price_cents)}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>
+                  {p.wholesale_price_cents != null ? (
+                    <span style={{ color: '#7c3aed' }}>{formatPrice(p.wholesale_price_cents)}</span>
+                  ) : (
+                    <span style={{ color: '#d1d5db' }}>—</span>
+                  )}
+                  {p.wholesale_only && (
+                    <span style={{
+                      display: 'inline-block', marginLeft: '0.35rem', padding: '0.1rem 0.35rem',
+                      borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700,
+                      background: '#f5f3ff', color: '#7c3aed', verticalAlign: 'middle',
+                    }}>
+                      W/S Only
+                    </span>
+                  )}
+                </td>
                 <td style={{
                   ...tdStyle, textAlign: 'right', fontWeight: 500,
                   color: p.stock_qty <= p.low_stock_threshold ? '#ef4444' : '#059669',

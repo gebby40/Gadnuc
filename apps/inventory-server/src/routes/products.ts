@@ -41,13 +41,14 @@ const productSchema = z.object({
   sale_start:  z.string().datetime().nullable().optional(),
   sale_end:    z.string().datetime().nullable().optional(),
   wholesale_price_cents: z.number().int().min(0).nullable().optional(),
+  wholesale_only: z.boolean().default(false),
 });
 
 const UPDATABLE_PRODUCT_FIELDS = new Set([
   'sku', 'name', 'description', 'category', 'price_cents', 'sale_price_cents',
   'stock_qty', 'low_stock_threshold', 'image_url', 'is_active', 'metadata',
   'weight_oz', 'length_in', 'width_in', 'height_in', 'shipping_class',
-  'tags', 'brand', 'is_featured', 'sale_start', 'sale_end', 'wholesale_price_cents',
+  'tags', 'brand', 'is_featured', 'sale_start', 'sale_end', 'wholesale_price_cents', 'wholesale_only',
 ]);
 
 // GET /api/products — list all products for this tenant (with pagination)
@@ -106,11 +107,11 @@ productsRouter.get('/export', requireRole('operator'), async (req, res) => {
         `SELECT sku, name, description, category, price_cents, sale_price_cents,
                 stock_qty, low_stock_threshold, image_url, is_active,
                 weight_oz, length_in, width_in, height_in, shipping_class,
-                tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents
+                tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents, wholesale_only
          FROM products ORDER BY name ASC`
       );
 
-      const csvHeaders = 'sku,name,description,category,price_cents,sale_price_cents,stock_qty,low_stock_threshold,image_url,is_active,weight_oz,length_in,width_in,height_in,shipping_class,tags,brand,is_featured,sale_start,sale_end,wholesale_price_cents';
+      const csvHeaders = 'sku,name,description,category,price_cents,sale_price_cents,stock_qty,low_stock_threshold,image_url,is_active,weight_oz,length_in,width_in,height_in,shipping_class,tags,brand,is_featured,sale_start,sale_end,wholesale_price_cents,wholesale_only';
       const csvRows = rows.map(r => {
         return [
           csvEscape(r.sku),
@@ -134,6 +135,7 @@ productsRouter.get('/export', requireRole('operator'), async (req, res) => {
           r.sale_start ? new Date(r.sale_start).toISOString() : '',
           r.sale_end ? new Date(r.sale_end).toISOString() : '',
           String(r.wholesale_price_cents ?? ''),
+          String(r.wholesale_only ?? false),
         ].join(',');
       });
 
@@ -356,8 +358,8 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
                    (sku, name, description, category, price_cents, sale_price_cents,
                     stock_qty, low_stock_threshold, image_url, is_active, metadata,
                     weight_oz, length_in, width_in, height_in, shipping_class,
-                    tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+                    tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents, wholesale_only)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
                  ON CONFLICT (sku) DO UPDATE SET
                    name = EXCLUDED.name,
                    description = EXCLUDED.description,
@@ -380,6 +382,7 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
                    sale_start = EXCLUDED.sale_start,
                    sale_end = EXCLUDED.sale_end,
                    wholesale_price_cents = EXCLUDED.wholesale_price_cents,
+                   wholesale_only = EXCLUDED.wholesale_only,
                    updated_at = now()
                  RETURNING (xmax = 0) AS is_insert`,
                 [d.sku, d.name, d.description ?? null, d.category ?? null,
@@ -388,7 +391,8 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
                  d.image_url ?? null, d.is_active, JSON.stringify(d.metadata),
                  d.weight_oz ?? null, d.length_in ?? null, d.width_in ?? null, d.height_in ?? null,
                  d.shipping_class, d.tags, d.brand ?? null, d.is_featured,
-                 d.sale_start ?? null, d.sale_end ?? null, d.wholesale_price_cents ?? null]
+                 d.sale_start ?? null, d.sale_end ?? null, d.wholesale_price_cents ?? null,
+                 d.wholesale_only ?? false]
               );
               if (upserted[0]?.is_insert) {
                 results.created++;
@@ -404,15 +408,16 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
                    (sku, name, description, category, price_cents, sale_price_cents,
                     stock_qty, low_stock_threshold, image_url, is_active, metadata,
                     weight_oz, length_in, width_in, height_in, shipping_class,
-                    tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+                    tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents, wholesale_only)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
                 [d.sku, d.name, d.description ?? null, d.category ?? null,
                  d.price_cents, d.sale_price_cents ?? null,
                  d.stock_qty, d.low_stock_threshold,
                  d.image_url ?? null, d.is_active, JSON.stringify(d.metadata),
                  d.weight_oz ?? null, d.length_in ?? null, d.width_in ?? null, d.height_in ?? null,
                  d.shipping_class, d.tags, d.brand ?? null, d.is_featured,
-                 d.sale_start ?? null, d.sale_end ?? null, d.wholesale_price_cents ?? null]
+                 d.sale_start ?? null, d.sale_end ?? null, d.wholesale_price_cents ?? null,
+                 d.wholesale_only ?? false]
               );
               results.created++;
               logAuditEvent({ req, action: 'product.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { sku: d.sku, import: true } });

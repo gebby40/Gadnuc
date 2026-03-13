@@ -5,6 +5,8 @@ import Link          from 'next/link';
 import Image         from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { useCart }   from '@/components/CartProvider';
+import { useAuth }   from '@/components/AuthProvider';
+import { loadAuthState } from '@/lib/auth';
 import { createCheckoutSession } from '@/lib/tenant-api';
 
 function formatPrice(cents: number): string {
@@ -14,6 +16,7 @@ function formatPrice(cents: number): string {
 export default function CartPage() {
   const { slug }                     = useParams<{ slug: string }>();
   const { items, totalCents, totalItems, updateQty, removeItem, clearCart } = useCart();
+  const { user }                     = useAuth();
   const router                       = useRouter();
   const [loading, setLoading]        = useState(false);
   const [error, setError]            = useState<string | null>(null);
@@ -29,12 +32,16 @@ export default function CartPage() {
       const successUrl = `${origin}/tenant/${slug}/checkout/success`;
       const cancelUrl  = `${origin}/tenant/${slug}/cart`;
 
+      // If wholesale customer, pass auth token so server uses wholesale pricing
+      const authToken = user?.isWholesale ? loadAuthState()?.token : undefined;
+
       const { url } = await createCheckoutSession(
         slug,
         items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
         successUrl,
         cancelUrl,
         email || undefined,
+        authToken,
       );
 
       // Clear cart before redirect (Stripe handles the session)

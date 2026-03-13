@@ -121,10 +121,11 @@ storefrontRouter.patch(
 );
 
 // ── GET /api/storefront/products ─────────────────────────────────────────────
-storefrontRouter.get('/products', async (req: Request, res: Response) => {
+storefrontRouter.get('/products', optionalAuth, async (req: Request, res: Response) => {
   const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
+  const isWholesale = req.user?.isWholesale === true;
   const { category, search, page = '1', limit = '24', sort = 'name_asc' } = req.query as Record<string, string>;
   const pageNum  = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 24));
@@ -143,6 +144,11 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
     const { rows, total } = await withTenantSchema(tenant.slug, async (db) => {
       const conditions: string[] = ['is_active = true'];
       const params: unknown[] = [];
+
+      // Wholesale customers see everything; retail customers cannot see wholesale-only products
+      if (!isWholesale) {
+        conditions.push('wholesale_only = false');
+      }
 
       if (category) {
         params.push(category);
@@ -165,6 +171,7 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
       const total = countRows[0]?.cnt ?? 0;
 
       // Data query — sale_price_cents is only returned when the sale window is active
+      // effective_price_cents: wholesale customers get wholesale price (if set), else retail
       params.push(limitNum, offset);
       const { rows } = await db.query(
         `SELECT id, sku, name, description, category, price_cents,
@@ -177,7 +184,12 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
                 END AS sale_price_cents,
                 stock_qty, image_url, metadata, weight_oz, length_in, width_in,
                 height_in, shipping_class, tags, brand, is_featured,
-                sale_start, sale_end, wholesale_price_cents
+                sale_start, sale_end, wholesale_price_cents, wholesale_only,
+                CASE
+                  WHEN ${isWholesale} AND wholesale_price_cents IS NOT NULL
+                  THEN wholesale_price_cents
+                  ELSE price_cents
+                END AS effective_price_cents
          FROM products
          WHERE ${where}
          ORDER BY ${orderBy}
@@ -203,9 +215,11 @@ storefrontRouter.get('/products', async (req: Request, res: Response) => {
 });
 
 // ── GET /api/storefront/products/:id ─────────────────────────────────────────
-storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
+storefrontRouter.get('/products/:id', optionalAuth, async (req: Request, res: Response) => {
   const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
+
+  const isWholesale = req.user?.isWholesale === true;
 
   try {
     const row = await withTenantSchema(tenant.slug, async (db) => {
@@ -220,7 +234,13 @@ storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
                 END AS sale_price_cents,
                 stock_qty, low_stock_threshold, image_url, metadata,
                 weight_oz, length_in, width_in, height_in, shipping_class,
-                tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents
+                tags, brand, is_featured, sale_start, sale_end,
+                wholesale_price_cents, wholesale_only,
+                CASE
+                  WHEN ${isWholesale} AND wholesale_price_cents IS NOT NULL
+                  THEN wholesale_price_cents
+                  ELSE price_cents
+                END AS effective_price_cents
          FROM products
          WHERE id = $1 AND is_active = true`,
         [req.params.id],
@@ -229,6 +249,13 @@ storefrontRouter.get('/products/:id', async (req: Request, res: Response) => {
     });
 
     if (!row) { res.status(404).json({ error: 'Product not found' }); return; }
+
+    // Wholesale-only products are hidden from non-wholesale customers
+    if ((row as Record<string, unknown>).wholesale_only && !isWholesale) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+
     res.json({ data: row });
   } catch (err) {
     console.error('[storefront] GET product/:id error:', err);
@@ -278,14 +305,16 @@ storefrontRouter.post('/checkout', optionalAuth, async (req: Request, res: Respo
 
   const { items, successUrl, cancelUrl, customerEmail } = parsed.data;
 
-  type ProdRow = { id: string; name: string; price_cents: number; stock_qty: number; image_url: string | null; is_active: boolean };
+  const isWholesale = req.user?.isWholesale === true;
+
+  type ProdRow = { id: string; name: string; price_cents: number; wholesale_price_cents: number | null; wholesale_only: boolean; stock_qty: number; image_url: string | null; is_active: boolean };
 
   try {
     // 1. Fetch product details from DB to get authoritative prices
     const productIds = items.map((i) => i.productId);
     const products: ProdRow[] = await withTenantSchema(tenant.slug, async (db) => {
       const { rows } = await db.query(
-        `SELECT id, name, price_cents, stock_qty, image_url, is_active
+        `SELECT id, name, price_cents, wholesale_price_cents, wholesale_only, stock_qty, image_url, is_active
          FROM products WHERE id = ANY($1::uuid[])`,
         [productIds],
       );
@@ -298,10 +327,20 @@ storefrontRouter.post('/checkout', optionalAuth, async (req: Request, res: Respo
       const p = productMap.get(item.productId);
       if (!p)              { res.status(422).json({ error: `Product ${item.productId} not found` }); return; }
       if (!p.is_active)    { res.status(422).json({ error: `Product "${p.name}" is unavailable` }); return; }
+      // Non-wholesale customers cannot buy wholesale-only products
+      if (p.wholesale_only && !isWholesale) {
+        res.status(422).json({ error: `Product "${p.name}" is unavailable` }); return;
+      }
       if (p.stock_qty < item.quantity) {
         res.status(422).json({ error: `Insufficient stock for "${p.name}"` });
         return;
       }
+    }
+
+    // Helper: compute effective price for a product based on wholesale status
+    function effectivePrice(p: ProdRow): number {
+      if (isWholesale && p.wholesale_price_cents != null) return p.wholesale_price_cents;
+      return p.price_cents;
     }
 
     // 2. Look up Stripe Connect status for this tenant
@@ -322,10 +361,10 @@ storefrontRouter.post('/checkout', optionalAuth, async (req: Request, res: Respo
     // Pre-compute total for platform fee (only when Connect is active)
     const totalCents = items.reduce((sum, item) => {
       const p = productMap.get(item.productId)!;
-      return sum + p.price_cents * item.quantity;
+      return sum + effectivePrice(p) * item.quantity;
     }, 0);
 
-    // 3. Build Stripe line items
+    // 3. Build Stripe line items (using effective prices based on wholesale status)
     const stripe = getStripe();
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = items.map((item) => {
       const p = productMap.get(item.productId)!;
@@ -336,7 +375,7 @@ storefrontRouter.post('/checkout', optionalAuth, async (req: Request, res: Respo
             name: p.name,
             ...(p.image_url ? { images: [p.image_url] } : {}),
           },
-          unit_amount: p.price_cents,
+          unit_amount: effectivePrice(p),
         },
         quantity: item.quantity,
       };
@@ -354,6 +393,7 @@ storefrontRouter.post('/checkout', optionalAuth, async (req: Request, res: Respo
         tenant_slug: tenant.slug,
         items_json:  JSON.stringify(items),
         ...(req.user?.role === 'customer' ? { customer_id: req.user.userId } : {}),
+        ...(isWholesale ? { is_wholesale: 'true' } : {}),
       },
       payment_intent_data: {
         metadata: { tenant_slug: tenant.slug },
@@ -429,16 +469,22 @@ export async function handleStripeWebhook(req: Request, res: Response) {
       try {
       const productIds = items.map((i) => i.productId);
       const { rows: products } = await db.query(
-        'SELECT id, name, price_cents, sku FROM products WHERE id = ANY($1::uuid[])',
+        'SELECT id, name, price_cents, wholesale_price_cents, sku FROM products WHERE id = ANY($1::uuid[])',
         [productIds],
       );
       const productMap = new Map(
-        (products as Array<{ id: string; name: string; price_cents: number; sku: string }>)
+        (products as Array<{ id: string; name: string; price_cents: number; wholesale_price_cents: number | null; sku: string }>)
           .map((p) => [p.id, p]),
       );
 
+      // Determine if this was a wholesale order from metadata
+      const isWholesaleOrder = session.metadata?.is_wholesale === 'true';
+
       const totalCents = items.reduce((sum, item) => {
-        return sum + (productMap.get(item.productId)?.price_cents ?? 0) * item.quantity;
+        const p = productMap.get(item.productId);
+        if (!p) return sum;
+        const price = (isWholesaleOrder && p.wholesale_price_cents != null) ? p.wholesale_price_cents : p.price_cents;
+        return sum + price * item.quantity;
       }, 0);
 
       const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
@@ -472,14 +518,15 @@ export async function handleStripeWebhook(req: Request, res: Response) {
       );
       const orderId = orderRows[0].id as string;
 
-      // Create order items
+      // Create order items (use wholesale price if applicable)
       for (const item of items) {
         const p = productMap.get(item.productId);
         if (!p) continue;
+        const unitPrice = (isWholesaleOrder && p.wholesale_price_cents != null) ? p.wholesale_price_cents : p.price_cents;
         await db.query(
           `INSERT INTO order_items (order_id, product_id, sku, name, quantity, unit_price_cents)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [orderId, item.productId, p.sku, p.name, item.quantity, p.price_cents],
+          [orderId, item.productId, p.sku, p.name, item.quantity, unitPrice],
         );
         // Decrement stock
         await db.query(
