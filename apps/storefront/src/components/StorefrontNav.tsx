@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useCart } from './CartProvider';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface Props {
   slug:       string;
@@ -15,6 +15,8 @@ interface Props {
 export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
   const { totalItems } = useCart();
   const router = useRouter();
+  const pathname = usePathname();
+  const isDashboard = pathname.includes('/dashboard');
   const base = `/tenant/${slug}`;
   const [searchValue, setSearchValue] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -104,40 +106,42 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
             Shop
           </Link>
 
-          {/* Cart icon */}
-          <Link
-            href={`${base}/cart`}
-            className="relative hover:opacity-75 transition-opacity"
-            style={{ color: 'var(--color-nav-text)', textDecoration: 'none' }}
-            aria-label="Cart"
-          >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* Cart icon (hidden on dashboard pages) */}
+          {!isDashboard && (
+            <Link
+              href={`${base}/cart`}
+              className="relative hover:opacity-75 transition-opacity"
+              style={{ color: 'var(--color-nav-text)', textDecoration: 'none' }}
+              aria-label="Cart"
             >
-              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <path d="M16 10a4 4 0 01-8 0" />
-            </svg>
-            {totalItems > 0 && (
-              <span
-                className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center rounded-full text-xs font-bold min-w-[18px] h-[18px] px-1"
-                style={{
-                  backgroundColor: 'var(--color-accent)',
-                  color: 'var(--color-accent-fg)',
-                  fontSize: '0.65rem',
-                }}
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                {totalItems > 99 ? '99+' : totalItems}
-              </span>
-            )}
-          </Link>
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 01-8 0" />
+              </svg>
+              {totalItems > 0 && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center rounded-full text-xs font-bold min-w-[18px] h-[18px] px-1"
+                  style={{
+                    backgroundColor: 'var(--color-accent)',
+                    color: 'var(--color-accent-fg)',
+                    fontSize: '0.65rem',
+                  }}
+                >
+                  {totalItems > 99 ? '99+' : totalItems}
+                </span>
+              )}
+            </Link>
+          )}
 
           {/* Mobile menu toggle */}
           <button
