@@ -99,8 +99,8 @@ authDiscoverRouter.post('/login-discover', asyncHandler(async (req: Request, res
 
   // 5. Issue tokens
   const accessToken = await signAccessToken({
-    userId: foundUser.id, tenantId: foundTenant.id,
-    tenantSlug: foundTenant.slug, role: foundUser.role,
+    sub: foundUser.id, tenantId: foundTenant.id,
+    tenantSlug: foundTenant.slug, role: foundUser.role, email: foundUser.email,
   });
   const refreshToken = generateRefreshToken();
   await storeRefreshToken({ token: refreshToken, userId: foundUser.id, tenantId: foundTenant.id });

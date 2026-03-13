@@ -70,7 +70,7 @@ async function issueTokenPair(
   tenantId: string,
   tenantSlug: string,
 ) {
-  const accessToken   = await signAccessToken({ userId: user.id, tenantId, tenantSlug, role: user.role });
+  const accessToken   = await signAccessToken({ sub: user.id, tenantId, tenantSlug, role: user.role, email: user.email });
   const refreshToken  = generateRefreshToken();
   await storeRefreshToken({ token: refreshToken, userId: user.id, tenantId });
   setRefreshCookie(res, refreshToken);
@@ -416,7 +416,7 @@ authRouter.post('/refresh', asyncHandler(async (req: Request, res: Response) => 
 
   setRefreshCookie(res, result.newToken);
   const accessToken = await signAccessToken({
-    userId: user.id, tenantId: tenant.id, tenantSlug: tenant.slug, role: user.role,
+    sub: user.id, tenantId: tenant.id, tenantSlug: tenant.slug, role: user.role, email: user.email,
   });
   logAuditEvent({ req, action: 'auth.token_refreshed', tenantId: tenant.id, userId: user.id });
   res.json({ access_token: accessToken, token_type: 'Bearer' });
