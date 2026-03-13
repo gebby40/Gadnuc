@@ -52,7 +52,7 @@ export function clearToken() {
 
 // ── Operator login ────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE = process.env.NEXT_PUBLIC_INVENTORY_URL ?? 'http://localhost:3001';
 
 export async function loginOperator(
   tenantSlug: string,
