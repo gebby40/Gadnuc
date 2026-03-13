@@ -27,11 +27,14 @@ function getSecret(): Uint8Array {
 const ACCESS_TOKEN_TTL  = '15m';
 const REFRESH_TOKEN_TTL = '30d';
 
-export async function signAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): Promise<string> {
+export async function signAccessToken(
+  payload: Omit<JwtPayload, 'iat' | 'exp'>,
+  ttl: string = ACCESS_TOKEN_TTL,
+): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_TTL)
+    .setExpirationTime(ttl)
     .setIssuer('gadnuc')
     .setAudience('gadnuc-api')
     .sign(getSecret());

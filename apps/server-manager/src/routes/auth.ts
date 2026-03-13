@@ -62,13 +62,15 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
+    // Platform admin tokens use a 24 h TTL (matching cookie maxAge)
+    // because there is no refresh-token flow for the admin panel.
     const accessToken = await signAccessToken({
       sub:        admin.id,
       tenantId:   PLATFORM_TENANT_ID,
       tenantSlug: PLATFORM_TENANT_SLUG,
       role:       'super_admin',
       email:      admin.email,
-    });
+    }, '24h');
 
     // Update last login
     await getPool().query(
