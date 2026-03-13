@@ -26,7 +26,7 @@ export function StorefrontShell({ slug, nav, footer, children }: Props) {
 
   const isLoginPage  = pathname.includes('/login');
   const isDashboard  = pathname.includes('/dashboard');
-  const isAdmin      = user && (user.role === 'tenant_admin' || user.role === 'operator');
+  const isAdmin      = user && (user.role === 'tenant_admin' || user.role === 'operator' || user.role === 'super_admin');
 
   // Login page: never show any chrome
   if (isLoginPage) {
