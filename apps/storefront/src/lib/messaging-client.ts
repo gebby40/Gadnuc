@@ -110,7 +110,17 @@ export async function fetchMessages(
   });
   if (!res.ok) return [];
   const body = await res.json();
-  return body.data ?? [];
+  // REST API returns snake_case; normalise to camelCase to match MessageEvent interface
+  return (body.data ?? []).map((m: any): MessageEvent => ({
+    id:          m.id,
+    roomId:      m.room_id   ?? m.roomId,
+    senderId:    m.sender_id ?? m.senderId ?? null,
+    senderName:  m.sender_name ?? m.senderName ?? '',
+    eventType:   m.event_type ?? m.eventType,
+    content:     m.content ?? {},
+    relatesToId: m.relates_to_id ?? m.relatesToId ?? null,
+    createdAt:   m.created_at ?? m.createdAt,
+  }));
 }
 
 export async function markRead(tenantSlug: string, roomId: string, token: string): Promise<void> {
