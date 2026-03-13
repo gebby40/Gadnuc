@@ -8,6 +8,7 @@
  *   order.created, order.updated, order.shipped, order.cancelled, order.refunded
  *   product.created, product.updated, product.deleted
  *   user.created, user.updated, user.deleted, user.deactivated
+ *   customer.registered, customer.updated, customer.deleted
  *   inventory.low_stock
  *   messaging.room_created, messaging.message_sent
  *
@@ -41,6 +42,9 @@ export const WEBHOOK_EVENTS = [
   'user.updated',
   'user.deleted',
   'user.deactivated',
+  'customer.registered',
+  'customer.updated',
+  'customer.deleted',
   'inventory.low_stock',
   'messaging.room_created',
   'messaging.message_sent',

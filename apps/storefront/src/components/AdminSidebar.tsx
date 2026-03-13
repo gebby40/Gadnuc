@@ -29,8 +29,9 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
   const base     = `/tenant/${slug}`;
 
   const manageItems: NavItem[] = [
-    { href: `${base}/dashboard`,          label: 'Dashboard' },
-    { href: `${base}/dashboard/products`, label: 'Products' },
+    { href: `${base}/dashboard`,            label: 'Dashboard' },
+    { href: `${base}/dashboard/products`,   label: 'Products' },
+    { href: `${base}/dashboard/customers`,  label: 'Customers' },
     {
       href: `${base}/dashboard/pricing`,
       label: 'Pricing',

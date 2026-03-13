@@ -17,7 +17,7 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import Stripe     from 'stripe';
 import { withTenantSchema, getPool } from '@gadnuc/db';
-import { requireAuth, requireRole } from '@gadnuc/auth';
+import { requireAuth, optionalAuth, requireRole } from '@gadnuc/auth';
 import { sendOrderConfirmation }    from '../services/nodemailer.js';
 import { emitWebhookEvent }         from '../services/webhooks.js';
 import { stripeCheckoutSessions }   from '../metrics.js';
@@ -266,7 +266,7 @@ const checkoutSchema = z.object({
   customerEmail: z.string().email().optional(),
 });
 
-storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
+storefrontRouter.post('/checkout', optionalAuth, async (req: Request, res: Response) => {
   const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
@@ -348,10 +348,12 @@ storefrontRouter.post('/checkout', async (req: Request, res: Response) => {
       line_items:  lineItems,
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  cancelUrl,
-      ...(customerEmail ? { customer_email: customerEmail } : {}),
+      ...(customerEmail ? { customer_email: customerEmail }
+          : req.user?.role === 'customer' ? { customer_email: req.user.email } : {}),
       metadata: {
         tenant_slug: tenant.slug,
         items_json:  JSON.stringify(items),
+        ...(req.user?.role === 'customer' ? { customer_id: req.user.userId } : {}),
       },
       payment_intent_data: {
         metadata: { tenant_slug: tenant.slug },
@@ -418,6 +420,7 @@ export async function handleStripeWebhook(req: Request, res: Response) {
 
   try {
     const items: Array<{ productId: string; quantity: number }> = JSON.parse(itemsJson);
+    const customerId = session.metadata?.customer_id ?? null;
 
     // Fetch authoritative product data & build order — wrapped in a transaction
     // so stock decrements and order creation are atomic (idempotent on replay).
@@ -440,17 +443,28 @@ export async function handleStripeWebhook(req: Request, res: Response) {
 
       const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
-      // Create order
+      // Create order (link to customer account if available)
+      // If no explicit customer_id but email matches an existing customer, link it
+      let resolvedCustomerId = customerId;
+      if (!resolvedCustomerId && session.customer_details?.email) {
+        const { rows: custRows } = await db.query(
+          'SELECT id FROM customers WHERE email = $1 LIMIT 1',
+          [session.customer_details.email],
+        );
+        if (custRows[0]) resolvedCustomerId = custRows[0].id as string;
+      }
+
       const { rows: orderRows } = await db.query(
         `INSERT INTO orders
-           (order_number, customer_name, customer_email, status,
+           (order_number, customer_name, customer_email, customer_id, status,
             total_cents, stripe_payment_intent_id, stripe_session_id)
-         VALUES ($1, $2, $3, 'processing', $4, $5, $6)
+         VALUES ($1, $2, $3, $4, 'processing', $5, $6, $7)
          RETURNING id, order_number`,
         [
           orderNumber,
           session.customer_details?.name ?? 'Customer',
           session.customer_details?.email ?? null,
+          resolvedCustomerId,
           totalCents,
           typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id ?? null,
           session.id,

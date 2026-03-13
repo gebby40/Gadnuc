@@ -120,6 +120,56 @@ export async function tenantLogout(slug: string): Promise<void> {
   clearAuthState();
 }
 
+// ── Customer auth (inventory-server) ─────────────────────────────────────────
+
+export interface CustomerLoginSuccess {
+  access_token: string;
+  token_type: string;
+  customer: {
+    id: string;
+    email: string;
+    first_name: string | null;
+    last_name: string | null;
+  };
+}
+
+export async function customerLogin(slug: string, email: string, password: string): Promise<CustomerLoginSuccess> {
+  const res = await fetch(`${INVENTORY_URL}/api/customers/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-slug': slug,
+    },
+    credentials: 'include',
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? 'Login failed');
+  }
+  return res.json();
+}
+
+export async function customerRegister(
+  slug: string,
+  data: { email: string; password: string; first_name?: string; last_name?: string },
+): Promise<CustomerLoginSuccess> {
+  const res = await fetch(`${INVENTORY_URL}/api/customers/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-slug': slug,
+    },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? 'Registration failed');
+  }
+  return res.json();
+}
+
 // ── Token decoding (client-side, no verification) ────────────────────────────
 
 export function decodeTokenPayload(token: string): AuthUser | null {

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useCart } from './CartProvider';
+import { useAuth } from './AuthProvider';
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -14,12 +15,15 @@ interface Props {
 
 export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
   const { totalItems, openDrawer } = useCart();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isDashboard = pathname.includes('/dashboard');
+  const isCustomer = user?.role === 'customer';
   const base = `/tenant/${slug}`;
   const [searchValue, setSearchValue] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -105,6 +109,58 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
           >
             Shop
           </Link>
+
+          {/* Account link/dropdown */}
+          {!isDashboard && (
+            isCustomer ? (
+              <div className="hidden sm:block relative">
+                <button
+                  onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+                  className="font-medium text-sm hover:opacity-75 transition-opacity flex items-center gap-1"
+                  style={{ background: 'none', border: 'none', color: 'var(--color-nav-text)', cursor: 'pointer', padding: 0 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  Account
+                </button>
+                {accountMenuOpen && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setAccountMenuOpen(false)} />
+                    <div style={{
+                      position: 'absolute', right: 0, top: '100%', marginTop: '0.5rem',
+                      background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: '160px', zIndex: 50,
+                      padding: '0.25rem 0',
+                    }}>
+                      <Link
+                        href={`${base}/account`}
+                        onClick={() => setAccountMenuOpen(false)}
+                        style={{ display: 'block', padding: '0.5rem 1rem', fontSize: '0.85rem', color: '#374151', textDecoration: 'none' }}
+                      >
+                        My Account
+                      </Link>
+                      <button
+                        onClick={() => { setAccountMenuOpen(false); logout(); router.push(base); }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 1rem', fontSize: '0.85rem', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <Link
+                href={`${base}/account/login`}
+                className="hidden sm:inline-block font-medium text-sm hover:opacity-75 transition-opacity"
+                style={{ color: 'var(--color-nav-text)', textDecoration: 'none' }}
+              >
+                Sign In
+              </Link>
+            )
+          )}
 
           {/* Cart icon — opens mini-cart drawer (hidden on dashboard pages) */}
           {!isDashboard && (
@@ -204,6 +260,40 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
           >
             Support
           </Link>
+
+          {/* Mobile account links */}
+          {!isDashboard && (
+            <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
+              {isCustomer ? (
+                <>
+                  <Link
+                    href={`${base}/account`}
+                    className="block py-2 text-sm font-medium"
+                    style={{ color: 'var(--color-nav-text)', textDecoration: 'none' }}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    My Account
+                  </Link>
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); logout(); router.push(base); }}
+                    className="block py-2 text-sm font-medium"
+                    style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 0', width: '100%', textAlign: 'left' }}
+                  >
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href={`${base}/account/login`}
+                  className="block py-2 text-sm font-medium"
+                  style={{ color: 'var(--color-nav-text)', textDecoration: 'none' }}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Sign In
+                </Link>
+              )}
+            </div>
+          )}
         </div>
       )}
     </nav>
