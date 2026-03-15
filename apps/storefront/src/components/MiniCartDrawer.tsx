@@ -54,6 +54,7 @@ export function MiniCartDrawer({ slug }: Props) {
         className="fixed top-0 right-0 z-[70] h-full w-full max-w-sm flex flex-col transition-transform duration-300 ease-out"
         style={{
           transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)',
+          pointerEvents: drawerOpen ? 'auto' : 'none',
           background: 'var(--color-bg)',
           borderLeft: '1px solid var(--color-border)',
         }}
