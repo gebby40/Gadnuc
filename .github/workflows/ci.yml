@@ -21,6 +21,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - run: npm run build -w packages/db -w packages/auth -w packages/tenant -w packages/feature-flags
       - run: npm run typecheck
 
   lint:
