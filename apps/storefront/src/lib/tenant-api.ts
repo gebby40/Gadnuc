@@ -55,6 +55,28 @@ export const getTenantSettings = cache(async (slug: string): Promise<StorefrontS
 });
 
 // ── Products ──────────────────────────────────────────────────────────────────
+export interface ProductVariant {
+  id:               string;
+  sku:              string | null;
+  price_cents:      number | null;
+  sale_price_cents: number | null;
+  stock:            number;
+  weight_oz:        number | null;
+  attributes:       Record<string, string>;
+  image_url:        string | null;
+  is_active:        boolean;
+  position:         number;
+}
+
+export interface ProductImage {
+  id:         string;
+  url:        string;
+  alt_text:   string;
+  position:   number;
+  is_primary: boolean;
+  variant_id: string | null;
+}
+
 export interface Product {
   id:               string;
   sku:              string;
@@ -79,6 +101,11 @@ export interface Product {
   wholesale_price_cents: number | null;
   wholesale_only:       boolean;
   effective_price_cents?: number;
+  product_type?:    'simple' | 'variable';
+  review_count?:    number;
+  avg_rating?:      number;
+  variants?:        ProductVariant[];
+  images?:          ProductImage[];
 }
 
 export interface ProductListMeta {
@@ -95,14 +122,23 @@ export interface ProductListResult {
 
 export async function getProducts(
   slug: string,
-  params: { category?: string; search?: string; page?: number; limit?: number; sort?: string } = {},
+  params: {
+    category?: string; search?: string; page?: number; limit?: number; sort?: string;
+    min_price?: string; max_price?: string; brand?: string; in_stock?: string; on_sale?: string; min_rating?: string;
+  } = {},
 ): Promise<ProductListResult> {
   const qs = new URLSearchParams();
-  if (params.category) qs.set('category', params.category);
-  if (params.search)   qs.set('search',   params.search);
-  if (params.page)     qs.set('page',     String(params.page));
-  if (params.limit)    qs.set('limit',    String(params.limit));
-  if (params.sort)     qs.set('sort',     params.sort);
+  if (params.category)  qs.set('category',  params.category);
+  if (params.search)    qs.set('search',    params.search);
+  if (params.page)      qs.set('page',      String(params.page));
+  if (params.limit)     qs.set('limit',     String(params.limit));
+  if (params.sort)      qs.set('sort',      params.sort);
+  if (params.min_price) qs.set('min_price', params.min_price);
+  if (params.max_price) qs.set('max_price', params.max_price);
+  if (params.brand)     qs.set('brand',     params.brand);
+  if (params.in_stock)  qs.set('in_stock',  params.in_stock);
+  if (params.on_sale)   qs.set('on_sale',   params.on_sale);
+  if (params.min_rating)qs.set('min_rating',params.min_rating);
 
   try {
     const res = await fetch(apiUrl(`/api/storefront/products?${qs}`), {
@@ -141,6 +177,27 @@ export const getCategories = cache(async (slug: string): Promise<string[]> => {
     return body.data ?? [];
   } catch {
     return [];
+  }
+});
+
+// ── Filter Facets ────────────────────────────────────────────────────────────
+export interface FilterFacets {
+  categories: { category: string; count: number }[];
+  brands:     { brand: string; count: number }[];
+  priceRange: { min: number; max: number };
+}
+
+export const getFilterFacets = cache(async (slug: string): Promise<FilterFacets> => {
+  try {
+    const res = await fetch(apiUrl('/api/storefront/filters'), {
+      headers: tenantHeaders(slug),
+      next: { revalidate: 120, tags: [`tenant:${slug}:filters`] },
+    });
+    if (!res.ok) return { categories: [], brands: [], priceRange: { min: 0, max: 0 } };
+    const body = await res.json();
+    return body.data ?? { categories: [], brands: [], priceRange: { min: 0, max: 0 } };
+  } catch {
+    return { categories: [], brands: [], priceRange: { min: 0, max: 0 } };
   }
 });
 
@@ -206,12 +263,20 @@ export async function getProductAuthenticated(
 export async function getRelatedProducts(
   slug: string,
   productId: string,
-  category: string | null,
+  _category: string | null,
   limit = 4,
 ): Promise<Product[]> {
-  if (!category) return [];
-  const result = await getProducts(slug, { category, limit: limit + 1 });
-  return result.data.filter((p) => p.id !== productId).slice(0, limit);
+  try {
+    const res = await fetch(
+      apiUrl(`/api/storefront/products/${productId}/related?limit=${limit}`),
+      { headers: tenantHeaders(slug), next: { revalidate: 60, tags: [`tenant:${slug}:related:${productId}`] } },
+    );
+    if (!res.ok) return [];
+    const body = await res.json();
+    return body.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 // ── Featured / New Arrivals ──────────────────────────────────────────────────
@@ -249,7 +314,87 @@ export const getTenantStorefront = cache(async (slug: string): Promise<Storefron
 // ── Checkout ──────────────────────────────────────────────────────────────────
 export interface CheckoutItem {
   productId: string;
+  variantId?: string;
   quantity:  number;
+}
+
+// ── Shipping Calculation ─────────────────────────────────────────────────────
+export interface ShippingMethod {
+  id: string;
+  title: string;
+  type: string;
+  costCents: number;
+  zoneName: string;
+}
+
+export async function calculateShipping(
+  slug: string,
+  params: { subtotalCents: number; totalItems: number; totalWeightOz?: number; country?: string; state?: string; zip?: string },
+): Promise<{ methods: ShippingMethod[] }> {
+  const res = await fetch(apiUrl('/api/storefront/shipping/calculate'), {
+    method: 'POST',
+    headers: tenantHeaders(slug),
+    body: JSON.stringify(params),
+    cache: 'no-store',
+  });
+  if (!res.ok) return { methods: [] };
+  return res.json();
+}
+
+// ── Tax Calculation ──────────────────────────────────────────────────────────
+export interface TaxBreakdownLine {
+  name: string;
+  ratePct: number;
+  amountCents: number;
+}
+
+export interface TaxCalculation {
+  taxCents: number;
+  breakdown: TaxBreakdownLine[];
+}
+
+export async function calculateTax(
+  slug: string,
+  subtotalCents: number,
+  address: { country?: string; state?: string; zip?: string } = {},
+): Promise<TaxCalculation> {
+  const res = await fetch(apiUrl('/api/storefront/tax/calculate'), {
+    method: 'POST',
+    headers: tenantHeaders(slug),
+    body: JSON.stringify({ subtotalCents, ...address }),
+    cache: 'no-store',
+  });
+  if (!res.ok) return { taxCents: 0, breakdown: [] };
+  return res.json();
+}
+
+export interface CouponValidation {
+  valid: boolean;
+  coupon: {
+    id: string;
+    code: string;
+    type: 'percentage' | 'fixed' | 'free_shipping';
+    value: number;
+    discountCents: number;
+  };
+}
+
+export async function validateCoupon(
+  slug: string,
+  code: string,
+  subtotalCents: number,
+): Promise<CouponValidation> {
+  const res = await fetch(apiUrl('/api/storefront/coupons/validate'), {
+    method: 'POST',
+    headers: tenantHeaders(slug),
+    body: JSON.stringify({ code, subtotalCents }),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Invalid coupon');
+  }
+  return res.json();
 }
 
 export async function createCheckoutSession(
@@ -259,6 +404,7 @@ export async function createCheckoutSession(
   cancelUrl:     string,
   customerEmail?: string,
   token?:        string,
+  couponCode?:   string,
 ): Promise<{ url: string; sessionId: string }> {
   const headers: Record<string, string> = { ...tenantHeaders(slug) as Record<string, string> };
   if (token) {
@@ -267,7 +413,7 @@ export async function createCheckoutSession(
   const res = await fetch(apiUrl('/api/storefront/checkout'), {
     method:  'POST',
     headers,
-    body:    JSON.stringify({ items, successUrl, cancelUrl, customerEmail }),
+    body:    JSON.stringify({ items, successUrl, cancelUrl, customerEmail, couponCode }),
     cache:   'no-store',
   });
   if (!res.ok) {
@@ -295,6 +441,9 @@ export interface Order {
   status:           string;
   total_cents:      number;
   shipping_address: Record<string, unknown> | null;
+  tracking_number:  string | null;
+  tracking_carrier: string | null;
+  tracking_url:     string | null;
   created_at:       string;
   updated_at:       string;
   items:            OrderItem[];
@@ -339,4 +488,50 @@ export async function trackEvent(
       cache:   'no-store',
     });
   } catch { /* non-critical */ }
+}
+
+// ── Product Reviews ──────────────────────────────────────────────────────────
+export interface ProductReview {
+  id:            string;
+  customer_name: string;
+  rating:        number;
+  title:         string | null;
+  body:          string | null;
+  created_at:    string;
+}
+
+export interface ReviewListResult {
+  data: ProductReview[];
+  meta: { page: number; limit: number; total: number };
+}
+
+export async function getProductReviews(
+  slug: string,
+  productId: string,
+  page = 1,
+  limit = 10,
+): Promise<ReviewListResult> {
+  try {
+    const res = await fetch(
+      apiUrl(`/api/storefront/products/${productId}/reviews?page=${page}&limit=${limit}`),
+      { headers: tenantHeaders(slug), next: { revalidate: 60, tags: [`tenant:${slug}:reviews:${productId}`] } },
+    );
+    if (!res.ok) return { data: [], meta: { page, limit, total: 0 } };
+    return res.json();
+  } catch {
+    return { data: [], meta: { page, limit, total: 0 } };
+  }
+}
+
+// ── Wishlist ─────────────────────────────────────────────────────────────────
+export interface WishlistItem {
+  id:              string;
+  product_id:      string;
+  variant_id:      string | null;
+  name:            string;
+  price_cents:     number;
+  sale_price_cents: number | null;
+  image_url:       string | null;
+  stock_qty:       number;
+  created_at:      string;
 }

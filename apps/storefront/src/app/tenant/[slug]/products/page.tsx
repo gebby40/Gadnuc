@@ -1,13 +1,17 @@
 import type { Metadata } from 'next';
 import { Suspense }         from 'react';
-import { getProducts, getCategories } from '@/lib/tenant-api';
+import { getProducts, getCategories, getFilterFacets } from '@/lib/tenant-api';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { SortDropdown }   from '@/components/SortDropdown';
+import { ProductFilters } from '@/components/ProductFilters';
 import { ProductsDisplay } from './ProductsDisplay';
 
 interface PageProps {
   params:       { slug: string };
-  searchParams: { category?: string; search?: string; page?: string; sort?: string };
+  searchParams: {
+    category?: string; search?: string; page?: string; sort?: string;
+    min_price?: string; max_price?: string; brand?: string; in_stock?: string; on_sale?: string; min_rating?: string;
+  };
 }
 
 export const metadata: Metadata = { title: 'Products' };
@@ -17,15 +21,22 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
   const page = parseInt(searchParams.page ?? '1', 10) || 1;
   const sort = searchParams.sort ?? 'name_asc';
 
-  const [productsResult, categories] = await Promise.all([
+  const [productsResult, categories, facets] = await Promise.all([
     getProducts(slug, {
-      category: searchParams.category,
-      search:   searchParams.search,
+      category:  searchParams.category,
+      search:    searchParams.search,
       page,
-      limit:    24,
+      limit:     24,
       sort,
+      min_price: searchParams.min_price,
+      max_price: searchParams.max_price,
+      brand:     searchParams.brand,
+      in_stock:  searchParams.in_stock,
+      on_sale:   searchParams.on_sale,
+      min_rating:searchParams.min_rating,
     }),
     getCategories(slug),
+    getFilterFacets(slug),
   ]);
 
   const { data: products, meta } = productsResult;
@@ -106,19 +117,33 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
         </div>
       )}
 
-      {/* Product grid / table — wholesale-aware client wrapper */}
-      <ProductsDisplay
-        slug={slug}
-        ssrProducts={products}
-        ssrMeta={meta}
-        searchParams={{
-          category: searchParams.category,
-          search: searchParams.search,
-          page,
-          sort,
-        }}
-        currentPage={page}
-      />
+      {/* Filters + Product grid */}
+      <div className="flex gap-8">
+        {/* Sidebar filters */}
+        {(facets.brands.length > 0 || facets.priceRange.max > 0) && (
+          <aside className="hidden md:block" style={{ width: 200, flexShrink: 0 }}>
+            <Suspense fallback={null}>
+              <ProductFilters facets={facets} />
+            </Suspense>
+          </aside>
+        )}
+
+        {/* Product grid / table — wholesale-aware client wrapper */}
+        <div className="flex-1 min-w-0">
+          <ProductsDisplay
+            slug={slug}
+            ssrProducts={products}
+            ssrMeta={meta}
+            searchParams={{
+              category: searchParams.category,
+              search: searchParams.search,
+              page,
+              sort,
+            }}
+            currentPage={page}
+          />
+        </div>
+      </div>
     </div>
   );
 }

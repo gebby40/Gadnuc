@@ -4,21 +4,23 @@ import { useState } from 'react';
 import { useCart } from './CartProvider';
 
 interface Props {
-  productId:   string;
-  name:        string;
-  priceCents:  number;
-  imageUrl:    string | null;
-  inStock:     boolean;
+  productId:    string;
+  variantId?:   string;
+  name:         string;
+  priceCents:   number;
+  imageUrl:     string | null;
+  inStock:      boolean;
+  variantLabel?: string;
 }
 
-export function AddToCartButton({ productId, name, priceCents, imageUrl, inStock }: Props) {
+export function AddToCartButton({ productId, variantId, name, priceCents, imageUrl, inStock, variantLabel }: Props) {
   const { addItem } = useCart();
   const [added, setAdded]   = useState(false);
   const [qty, setQty]       = useState(1);
 
   function handleAdd() {
     if (!inStock) return;
-    addItem({ productId, name, priceCents, imageUrl, quantity: qty });
+    addItem({ productId, variantId, name, priceCents, imageUrl, quantity: qty, variantLabel });
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   }

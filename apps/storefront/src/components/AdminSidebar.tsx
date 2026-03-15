@@ -30,14 +30,29 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
 
   const manageItems: NavItem[] = [
     { href: `${base}/dashboard`,            label: 'Dashboard' },
-    { href: `${base}/dashboard/products`,   label: 'Products' },
+    {
+      href: `${base}/dashboard/products`,
+      label: 'Products',
+      children: [
+        { href: `${base}/dashboard/products/reviews`, label: 'Reviews' },
+      ],
+    },
     { href: `${base}/dashboard/customers`,  label: 'Customers' },
     {
       href: `${base}/dashboard/pricing`,
       label: 'Pricing',
       children: [
         { href: `${base}/dashboard/pricing/discounts`,        label: 'Discount Rules' },
+        { href: `${base}/dashboard/pricing/coupons`,          label: 'Coupon Codes' },
         { href: `${base}/dashboard/pricing/customer-groups`,  label: 'Customer Groups' },
+      ],
+    },
+    {
+      href: `${base}/dashboard/settings`,
+      label: 'Settings',
+      children: [
+        { href: `${base}/dashboard/settings/tax`,      label: 'Tax' },
+        { href: `${base}/dashboard/settings/shipping`, label: 'Shipping' },
       ],
     },
     {
@@ -58,6 +73,7 @@ export function AdminSidebar({ slug, user, onLogout }: Props) {
       ],
     },
     { href: `${base}/products`,  label: 'Browse Products' },
+    { href: `${base}/wishlist`,  label: 'Wishlist' },
     { href: `${base}/cart`,      label: 'Cart' },
     { href: `${base}/workspace`, label: 'Workspace' },
   ];

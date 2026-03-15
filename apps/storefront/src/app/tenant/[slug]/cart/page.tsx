@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCart }   from '@/components/CartProvider';
 import { useAuth }   from '@/components/AuthProvider';
 import { loadAuthState } from '@/lib/auth';
-import { createCheckoutSession } from '@/lib/tenant-api';
+import { createCheckoutSession, validateCoupon } from '@/lib/tenant-api';
 
 function formatPrice(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -21,6 +21,38 @@ export default function CartPage() {
   const [loading, setLoading]        = useState(false);
   const [error, setError]            = useState<string | null>(null);
   const [email, setEmail]            = useState('');
+  const [couponCode, setCouponCode]  = useState('');
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discountCents: number; type: string } | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError]     = useState<string | null>(null);
+
+  async function handleApplyCoupon() {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const result = await validateCoupon(slug, couponCode.trim(), totalCents);
+      setCouponApplied({
+        code: result.coupon.code,
+        discountCents: result.coupon.discountCents,
+        type: result.coupon.type,
+      });
+    } catch (err) {
+      setCouponError(err instanceof Error ? err.message : 'Invalid coupon');
+      setCouponApplied(null);
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  function removeCoupon() {
+    setCouponApplied(null);
+    setCouponCode('');
+    setCouponError(null);
+  }
+
+  const discountCents = couponApplied?.discountCents ?? 0;
+  const finalTotal = totalCents - discountCents;
 
   async function handleCheckout() {
     if (items.length === 0) return;
@@ -37,11 +69,12 @@ export default function CartPage() {
 
       const { url } = await createCheckoutSession(
         slug,
-        items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        items.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity })),
         successUrl,
         cancelUrl,
         email || undefined,
         authToken,
+        couponApplied?.code,
       );
 
       // Clear cart before redirect (Stripe handles the session)
@@ -85,7 +118,7 @@ export default function CartPage() {
         <div className="lg:col-span-2 space-y-4">
           {items.map((item) => (
             <div
-              key={item.productId}
+              key={item.variantId ? `${item.productId}::${item.variantId}` : item.productId}
               className="flex gap-4 p-4 rounded-xl"
               style={{
                 border:     '1px solid var(--color-border)',
@@ -115,6 +148,9 @@ export default function CartPage() {
                 <h3 className="font-semibold text-sm truncate" style={{ color: 'var(--color-text)' }}>
                   {item.name}
                 </h3>
+                {item.variantLabel && (
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{item.variantLabel}</p>
+                )}
                 <p className="text-sm font-bold mt-1" style={{ color: 'var(--color-primary)' }}>
                   {formatPrice(item.priceCents)}
                 </p>
@@ -126,7 +162,7 @@ export default function CartPage() {
                     style={{ border: '1px solid var(--color-border)' }}
                   >
                     <button
-                      onClick={() => updateQty(item.productId, item.quantity - 1)}
+                      onClick={() => updateQty(item.productId, item.quantity - 1, item.variantId)}
                       className="px-2.5 py-1 text-sm hover:opacity-70 transition-opacity"
                       style={{ color: 'var(--color-text)' }}
                     >
@@ -136,7 +172,7 @@ export default function CartPage() {
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => updateQty(item.productId, item.quantity + 1)}
+                      onClick={() => updateQty(item.productId, item.quantity + 1, item.variantId)}
                       className="px-2.5 py-1 text-sm hover:opacity-70 transition-opacity"
                       style={{ color: 'var(--color-text)' }}
                     >
@@ -144,7 +180,7 @@ export default function CartPage() {
                     </button>
                   </div>
                   <button
-                    onClick={() => removeItem(item.productId)}
+                    onClick={() => removeItem(item.productId, item.variantId)}
                     className="text-xs hover:opacity-70 transition-opacity"
                     style={{ color: 'var(--color-text-muted)' }}
                   >
@@ -177,19 +213,78 @@ export default function CartPage() {
 
           <div className="space-y-2 mb-4">
             {items.map((item) => (
-              <div key={item.productId} className="flex justify-between text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              <div key={item.variantId ? `${item.productId}::${item.variantId}` : item.productId} className="flex justify-between text-sm" style={{ color: 'var(--color-text-muted)' }}>
                 <span className="truncate mr-2">{item.name} × {item.quantity}</span>
                 <span className="flex-shrink-0">{formatPrice(item.priceCents * item.quantity)}</span>
               </div>
             ))}
           </div>
 
-          <div
-            className="flex justify-between font-bold text-lg py-3 mb-5"
-            style={{ borderTop: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-          >
-            <span>Total</span>
-            <span>{formatPrice(totalCents)}</span>
+          {/* Coupon code */}
+          <div className="mb-4" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
+            {couponApplied ? (
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: '#16a34a' }}>
+                  Coupon: <strong>{couponApplied.code}</strong> (−{formatPrice(couponApplied.discountCents)})
+                </span>
+                <button
+                  onClick={removeCoupon}
+                  className="text-xs hover:opacity-70"
+                  style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Coupon code"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+                <button
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponCode.trim()}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text)',
+                    cursor: couponLoading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {couponLoading ? '...' : 'Apply'}
+                </button>
+              </div>
+            )}
+            {couponError && (
+              <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{couponError}</p>
+            )}
+          </div>
+
+          {/* Totals */}
+          <div className="space-y-2 mb-5" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
+            <div className="flex justify-between text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              <span>Subtotal</span>
+              <span>{formatPrice(totalCents)}</span>
+            </div>
+            {discountCents > 0 && (
+              <div className="flex justify-between text-sm" style={{ color: '#16a34a' }}>
+                <span>Discount</span>
+                <span>−{formatPrice(discountCents)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-lg pt-2" style={{ color: 'var(--color-text)' }}>
+              <span>Total</span>
+              <span>{formatPrice(finalTotal)}</span>
+            </div>
           </div>
 
           {/* Email (optional) */}

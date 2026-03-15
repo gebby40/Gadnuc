@@ -90,7 +90,7 @@ export function MiniCartDrawer({ slug }: Props) {
             <ul className="flex flex-col gap-4">
               {items.map((item) => (
                 <li
-                  key={item.productId}
+                  key={item.variantId ? `${item.productId}::${item.variantId}` : item.productId}
                   className="flex gap-3"
                   style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}
                 >
@@ -123,6 +123,11 @@ export function MiniCartDrawer({ slug }: Props) {
                     >
                       {item.name}
                     </p>
+                    {item.variantLabel && (
+                      <p className="text-xs mb-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                        {item.variantLabel}
+                      </p>
+                    )}
                     <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
                       {formatPrice(item.priceCents)}
                     </p>
@@ -130,7 +135,7 @@ export function MiniCartDrawer({ slug }: Props) {
                     {/* Qty controls */}
                     <div className="flex items-center gap-2 mt-1.5">
                       <button
-                        onClick={() => updateQty(item.productId, item.quantity - 1)}
+                        onClick={() => updateQty(item.productId, item.quantity - 1, item.variantId)}
                         className="w-6 h-6 flex items-center justify-center rounded text-xs"
                         style={{
                           border: '1px solid var(--color-border)',
@@ -146,7 +151,7 @@ export function MiniCartDrawer({ slug }: Props) {
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateQty(item.productId, item.quantity + 1)}
+                        onClick={() => updateQty(item.productId, item.quantity + 1, item.variantId)}
                         className="w-6 h-6 flex items-center justify-center rounded text-xs"
                         style={{
                           border: '1px solid var(--color-border)',
@@ -159,7 +164,7 @@ export function MiniCartDrawer({ slug }: Props) {
                         +
                       </button>
                       <button
-                        onClick={() => removeItem(item.productId)}
+                        onClick={() => removeItem(item.productId, item.variantId)}
                         className="ml-auto text-xs hover:opacity-60 transition-opacity"
                         style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}
                         aria-label="Remove"

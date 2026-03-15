@@ -42,13 +42,14 @@ const productSchema = z.object({
   sale_end:    z.string().datetime().nullable().optional(),
   wholesale_price_cents: z.number().int().min(0).nullable().optional(),
   wholesale_only: z.boolean().default(false),
+  product_type: z.enum(['simple', 'variable']).default('simple'),
 });
 
 const UPDATABLE_PRODUCT_FIELDS = new Set([
   'sku', 'name', 'description', 'category', 'price_cents', 'sale_price_cents',
   'stock_qty', 'low_stock_threshold', 'image_url', 'is_active', 'metadata',
   'weight_oz', 'length_in', 'width_in', 'height_in', 'shipping_class',
-  'tags', 'brand', 'is_featured', 'sale_start', 'sale_end', 'wholesale_price_cents', 'wholesale_only',
+  'tags', 'brand', 'is_featured', 'sale_start', 'sale_end', 'wholesale_price_cents', 'wholesale_only', 'product_type',
 ]);
 
 // GET /api/products — list all products for this tenant (with pagination)
@@ -279,6 +280,7 @@ function mapWooCommerceRow(wc: Record<string, string>): z.infer<typeof productSc
     sale_end:    wc['Date sale price ends']   || wc['sale_end']   || null,
     wholesale_price_cents: wc['Wholesale price'] ? Math.round(parseFloat(wc['Wholesale price']) * 100) : null,
     wholesale_only: (wc['Wholesale only'] || wc['wholesale_only'] || '0') === '1' || (wc['Wholesale only'] || wc['wholesale_only'] || 'false') === 'true',
+    product_type: 'simple' as const,
   };
 }
 
@@ -735,7 +737,677 @@ productsRouter.delete('/customer-groups/:id', requireRole('tenant_admin'), async
   }
 });
 
-// GET /api/products/:id — MUST be after named sub-routes (discount-rules, customer-groups)
+// ── Product Attributes CRUD ────────────────────────────────────────────────
+
+const attributeSchema = z.object({
+  name:     z.string().min(1).max(100),
+  slug:     z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/),
+  type:     z.enum(['select', 'color', 'size']).default('select'),
+  values:   z.array(z.string().max(100)).default([]),
+  position: z.number().int().min(0).default(0),
+});
+
+productsRouter.get('/attributes', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query('SELECT * FROM product_attributes ORDER BY position ASC, name ASC');
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[attributes] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+productsRouter.post('/attributes', requireRole('operator'), async (req, res) => {
+  const parse = attributeSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO product_attributes (name, slug, type, values, position)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [d.name, d.slug, d.type, JSON.stringify(d.values), d.position]
+      );
+      res.status(201).json({ data: rows[0] });
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === '23505') { res.status(409).json({ error: 'Attribute slug already exists' }); return; }
+    console.error('[attributes] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+productsRouter.patch('/attributes/:attrId', requireRole('operator'), async (req, res) => {
+  const parse = attributeSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const updates = parse.data;
+  const fields = Object.keys(updates) as Array<keyof typeof updates>;
+  if (fields.length === 0) { res.status(400).json({ error: 'No fields to update' }); return; }
+  const setClauses = fields.map((f, i) => `${f === 'values' ? '"values"' : f} = $${i + 2}`).join(', ');
+  const values = fields.map(f => f === 'values' ? JSON.stringify(updates[f]) : updates[f]);
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `UPDATE product_attributes SET ${setClauses}, updated_at = now() WHERE id = $1 RETURNING *`,
+        [req.params.attrId, ...values]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Attribute not found' }); return; }
+      res.json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[attributes] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+productsRouter.delete('/attributes/:attrId', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM product_attributes WHERE id = $1', [req.params.attrId]);
+      if (!rowCount) { res.status(404).json({ error: 'Attribute not found' }); return; }
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[attributes] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Shipping Zones & Methods CRUD ────────────────────────────────────────
+
+const shippingZoneSchema = z.object({
+  name:         z.string().min(1).max(100),
+  countries:    z.array(z.string().length(2)).default(['US']),
+  states:       z.array(z.string().max(10)).default([]),
+  zip_patterns: z.array(z.string().max(20)).default([]),
+  priority:     z.number().int().min(0).default(0),
+  is_active:    z.boolean().default(true),
+});
+
+const shippingMethodSchema = z.object({
+  zone_id:              z.string().uuid(),
+  type:                 z.enum(['flat_rate', 'free_shipping', 'local_pickup', 'weight_based']),
+  title:                z.string().min(1).max(100).default('Shipping'),
+  cost_cents:           z.number().int().min(0).default(0),
+  free_above_cents:     z.number().int().min(0).nullable().optional(),
+  per_item_cents:       z.number().int().min(0).default(0),
+  weight_rate_cents_per_oz: z.number().int().min(0).default(0),
+  is_active:            z.boolean().default(true),
+  position:             z.number().int().min(0).default(0),
+});
+
+// GET /api/products/shipping-zones
+productsRouter.get('/shipping-zones', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows: zones } = await db.query('SELECT * FROM shipping_zones ORDER BY priority ASC, name ASC');
+      const { rows: methods } = await db.query('SELECT * FROM shipping_methods ORDER BY position ASC');
+      const zonesWithMethods = zones.map((z: any) => ({
+        ...z,
+        methods: methods.filter((m: any) => m.zone_id === z.id),
+      }));
+      res.json({ data: zonesWithMethods });
+    });
+  } catch (err) {
+    console.error('[shipping-zones] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/shipping-zones
+productsRouter.post('/shipping-zones', requireRole('tenant_admin'), async (req, res) => {
+  const parse = shippingZoneSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO shipping_zones (name, countries, states, zip_patterns, priority, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [d.name, JSON.stringify(d.countries), JSON.stringify(d.states), JSON.stringify(d.zip_patterns), d.priority, d.is_active]
+      );
+      res.status(201).json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[shipping-zones] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/shipping-zones/:zoneId
+productsRouter.delete('/shipping-zones/:zoneId', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM shipping_zones WHERE id = $1', [req.params.zoneId]);
+      if (!rowCount) { res.status(404).json({ error: 'Shipping zone not found' }); return; }
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[shipping-zones] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/shipping-methods
+productsRouter.post('/shipping-methods', requireRole('tenant_admin'), async (req, res) => {
+  const parse = shippingMethodSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO shipping_methods (zone_id, type, title, cost_cents, free_above_cents, per_item_cents, weight_rate_cents_per_oz, is_active, position)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [d.zone_id, d.type, d.title, d.cost_cents, d.free_above_cents ?? null, d.per_item_cents, d.weight_rate_cents_per_oz, d.is_active, d.position]
+      );
+      res.status(201).json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[shipping-methods] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/shipping-methods/:methodId
+productsRouter.delete('/shipping-methods/:methodId', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM shipping_methods WHERE id = $1', [req.params.methodId]);
+      if (!rowCount) { res.status(404).json({ error: 'Shipping method not found' }); return; }
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[shipping-methods] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Tax Zones & Rates CRUD ───────────────────────────────────────────────
+
+const taxZoneSchema = z.object({
+  name:        z.string().min(1).max(100),
+  country:     z.string().length(2).default('US'),
+  state:       z.string().max(10).nullable().optional(),
+  zip_pattern: z.string().max(20).nullable().optional(),
+  priority:    z.number().int().min(0).default(0),
+  is_active:   z.boolean().default(true),
+});
+
+const taxRateSchema = z.object({
+  zone_id:     z.string().uuid(),
+  tax_class:   z.enum(['standard', 'reduced', 'zero']).default('standard'),
+  rate_pct:    z.number().min(0).max(100),
+  name:        z.string().min(1).max(100).default('Tax'),
+  is_compound: z.boolean().default(false),
+  is_shipping: z.boolean().default(false),
+});
+
+// GET /api/products/tax-zones
+productsRouter.get('/tax-zones', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows: zones } = await db.query('SELECT * FROM tax_zones ORDER BY priority ASC, name ASC');
+      const { rows: rates } = await db.query('SELECT * FROM tax_rates ORDER BY created_at ASC');
+      // Nest rates under their zones
+      const zonesWithRates = zones.map((z: any) => ({
+        ...z,
+        rates: rates.filter((r: any) => r.zone_id === z.id),
+      }));
+      res.json({ data: zonesWithRates });
+    });
+  } catch (err) {
+    console.error('[tax-zones] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/tax-zones
+productsRouter.post('/tax-zones', requireRole('tenant_admin'), async (req, res) => {
+  const parse = taxZoneSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO tax_zones (name, country, state, zip_pattern, priority, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [d.name, d.country, d.state ?? null, d.zip_pattern ?? null, d.priority, d.is_active]
+      );
+      res.status(201).json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[tax-zones] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/tax-zones/:zoneId
+productsRouter.patch('/tax-zones/:zoneId', requireRole('tenant_admin'), async (req, res) => {
+  const parse = taxZoneSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const updates = parse.data;
+  const fields = Object.keys(updates) as Array<keyof typeof updates>;
+  if (fields.length === 0) { res.status(400).json({ error: 'No fields to update' }); return; }
+  const setClauses = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
+  const values = fields.map(f => updates[f]);
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `UPDATE tax_zones SET ${setClauses}, updated_at = now() WHERE id = $1 RETURNING *`,
+        [req.params.zoneId, ...values]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Tax zone not found' }); return; }
+      res.json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[tax-zones] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/tax-zones/:zoneId
+productsRouter.delete('/tax-zones/:zoneId', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM tax_zones WHERE id = $1', [req.params.zoneId]);
+      if (!rowCount) { res.status(404).json({ error: 'Tax zone not found' }); return; }
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[tax-zones] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/tax-rates
+productsRouter.post('/tax-rates', requireRole('tenant_admin'), async (req, res) => {
+  const parse = taxRateSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO tax_rates (zone_id, tax_class, rate_pct, name, is_compound, is_shipping)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [d.zone_id, d.tax_class, d.rate_pct, d.name, d.is_compound, d.is_shipping]
+      );
+      res.status(201).json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[tax-rates] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/tax-rates/:rateId
+productsRouter.delete('/tax-rates/:rateId', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM tax_rates WHERE id = $1', [req.params.rateId]);
+      if (!rowCount) { res.status(404).json({ error: 'Tax rate not found' }); return; }
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[tax-rates] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Coupons CRUD ─────────────────────────────────────────────────────────
+
+const couponSchema = z.object({
+  code:               z.string().min(1).max(50).transform(s => s.toUpperCase().trim()),
+  type:               z.enum(['percentage', 'fixed', 'free_shipping']),
+  value:              z.number().min(0).default(0),
+  min_order_cents:    z.number().int().min(0).default(0),
+  max_uses:           z.number().int().min(1).nullable().optional(),
+  per_customer_limit: z.number().int().min(1).nullable().optional(),
+  applies_to:         z.enum(['all', 'categories', 'products']).default('all'),
+  product_ids:        z.array(z.string().uuid()).default([]),
+  category_names:     z.array(z.string().max(100)).default([]),
+  starts_at:          z.string().datetime().nullable().optional(),
+  expires_at:         z.string().datetime().nullable().optional(),
+  is_active:          z.boolean().default(true),
+});
+
+// GET /api/products/coupons — list all coupons
+productsRouter.get('/coupons', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query('SELECT * FROM coupons ORDER BY created_at DESC');
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[coupons] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/coupons — create coupon
+productsRouter.post('/coupons', requireRole('operator'), async (req, res) => {
+  const parse = couponSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO coupons (code, type, value, min_order_cents, max_uses, per_customer_limit,
+          applies_to, product_ids, category_names, starts_at, expires_at, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        [d.code, d.type, d.value, d.min_order_cents, d.max_uses ?? null, d.per_customer_limit ?? null,
+         d.applies_to, JSON.stringify(d.product_ids), JSON.stringify(d.category_names),
+         d.starts_at ?? null, d.expires_at ?? null, d.is_active]
+      );
+      res.status(201).json({ data: rows[0] });
+      logAuditEvent({ req, action: 'coupon.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { coupon_id: rows[0].id, code: d.code } });
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === '23505') { res.status(409).json({ error: 'Coupon code already exists' }); return; }
+    console.error('[coupons] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/coupons/:id — update coupon
+productsRouter.patch('/coupons/:couponId', requireRole('operator'), async (req, res) => {
+  const parse = couponSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const updates = parse.data;
+  const fields = Object.keys(updates) as Array<keyof typeof updates>;
+  if (fields.length === 0) { res.status(400).json({ error: 'No fields to update' }); return; }
+  const setClauses = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
+  const values = fields.map(f => {
+    const val = updates[f];
+    if (f === 'product_ids' || f === 'category_names') return JSON.stringify(val);
+    return val;
+  });
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `UPDATE coupons SET ${setClauses}, updated_at = now() WHERE id = $1 RETURNING *`,
+        [req.params.couponId, ...values]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Coupon not found' }); return; }
+      res.json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[coupons] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/coupons/:couponId
+productsRouter.delete('/coupons/:couponId', requireRole('tenant_admin'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM coupons WHERE id = $1', [req.params.couponId]);
+      if (!rowCount) { res.status(404).json({ error: 'Coupon not found' }); return; }
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[coupons] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Product Images CRUD ──────────────────────────────────────────────────
+
+const imageSchema = z.object({
+  url:        z.string().url(),
+  cdn_key:    z.string().max(500).nullable().optional(),
+  alt_text:   z.string().max(255).default(''),
+  variant_id: z.string().uuid().nullable().optional(),
+  position:   z.number().int().min(0).default(0),
+  is_primary: z.boolean().default(false),
+});
+
+// GET /api/products/:id/images
+productsRouter.get('/:id/images', async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        'SELECT * FROM product_images WHERE product_id = $1 ORDER BY position ASC, created_at ASC',
+        [req.params.id]
+      );
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[images] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/:id/images
+productsRouter.post('/:id/images', requireRole('operator'), async (req, res) => {
+  const parse = imageSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows: pRows } = await db.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
+      if (!pRows[0]) { res.status(404).json({ error: 'Product not found' }); return; }
+
+      // If this is marked primary, clear other primaries for this product
+      if (d.is_primary) {
+        await db.query('UPDATE product_images SET is_primary = false WHERE product_id = $1', [req.params.id]);
+      }
+
+      // Auto-set first image as primary
+      const { rows: countRows } = await db.query(
+        'SELECT COUNT(*)::int AS cnt FROM product_images WHERE product_id = $1',
+        [req.params.id]
+      );
+      const isFirst = countRows[0]?.cnt === 0;
+
+      const { rows } = await db.query(
+        `INSERT INTO product_images (product_id, variant_id, url, cdn_key, alt_text, position, is_primary)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [req.params.id, d.variant_id ?? null, d.url, d.cdn_key ?? null, d.alt_text, d.position, d.is_primary || isFirst]
+      );
+
+      // Sync primary image_url on the product for backwards compatibility
+      if (d.is_primary || isFirst) {
+        await db.query('UPDATE products SET image_url = $1, updated_at = now() WHERE id = $2', [d.url, req.params.id]);
+      }
+
+      res.status(201).json({ data: rows[0] });
+      logAuditEvent({ req, action: 'product_image.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: req.params.id, image_id: rows[0].id } });
+    });
+  } catch (err) {
+    console.error('[images] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/:id/images/:imageId — update position, alt_text, is_primary
+productsRouter.patch('/:id/images/:imageId', requireRole('operator'), async (req, res) => {
+  const parse = imageSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const updates = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      // If setting as primary, clear others first
+      if (updates.is_primary) {
+        await db.query('UPDATE product_images SET is_primary = false WHERE product_id = $1', [req.params.id]);
+      }
+
+      const fields = Object.keys(updates) as Array<keyof typeof updates>;
+      if (fields.length === 0) { res.status(400).json({ error: 'No fields to update' }); return; }
+      const setClauses = fields.map((f, i) => `${f} = $${i + 3}`).join(', ');
+      const values = fields.map(f => updates[f]);
+
+      const { rows } = await db.query(
+        `UPDATE product_images SET ${setClauses} WHERE id = $1 AND product_id = $2 RETURNING *`,
+        [req.params.imageId, req.params.id, ...values]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Image not found' }); return; }
+
+      // Sync primary image_url on the product
+      if (updates.is_primary) {
+        await db.query('UPDATE products SET image_url = $1, updated_at = now() WHERE id = $2', [rows[0].url, req.params.id]);
+      }
+
+      res.json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[images] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/:id/images/:imageId
+productsRouter.delete('/:id/images/:imageId', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        'DELETE FROM product_images WHERE id = $1 AND product_id = $2 RETURNING is_primary, url',
+        [req.params.imageId, req.params.id]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Image not found' }); return; }
+
+      // If we deleted the primary, promote the next image
+      if (rows[0].is_primary) {
+        const { rows: nextRows } = await db.query(
+          'UPDATE product_images SET is_primary = true WHERE product_id = $1 ORDER BY position ASC LIMIT 1 RETURNING url',
+          [req.params.id]
+        );
+        const newPrimaryUrl = nextRows[0]?.url ?? null;
+        await db.query('UPDATE products SET image_url = $1, updated_at = now() WHERE id = $2', [newPrimaryUrl, req.params.id]);
+      }
+
+      res.status(204).send();
+      logAuditEvent({ req, action: 'product_image.deleted', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: req.params.id, image_id: req.params.imageId } });
+    });
+  } catch (err) {
+    console.error('[images] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Product Variants CRUD ─────────────────────────────────────────────────
+
+const variantSchema = z.object({
+  sku:              z.string().max(100).nullable().optional(),
+  price_cents:      z.number().int().min(0).nullable().optional(),
+  sale_price_cents: z.number().int().min(0).nullable().optional(),
+  stock:            z.number().int().min(0).default(0),
+  weight_oz:        z.number().min(0).nullable().optional(),
+  length_in:        z.number().min(0).nullable().optional(),
+  width_in:         z.number().min(0).nullable().optional(),
+  height_in:        z.number().min(0).nullable().optional(),
+  attributes:       z.record(z.string()).default({}),
+  image_url:        z.string().url().nullable().optional(),
+  is_active:        z.boolean().default(true),
+  position:         z.number().int().min(0).default(0),
+});
+
+// GET /api/products/:id/variants
+productsRouter.get('/:id/variants', async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        'SELECT * FROM product_variants WHERE product_id = $1 ORDER BY position ASC, created_at ASC',
+        [req.params.id]
+      );
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[variants] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/:id/variants
+productsRouter.post('/:id/variants', requireRole('operator'), async (req, res) => {
+  const parse = variantSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const d = parse.data;
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      // Verify product exists
+      const { rows: pRows } = await db.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
+      if (!pRows[0]) { res.status(404).json({ error: 'Product not found' }); return; }
+
+      // Auto-set product_type to 'variable'
+      await db.query("UPDATE products SET product_type = 'variable', updated_at = now() WHERE id = $1", [req.params.id]);
+
+      const { rows } = await db.query(
+        `INSERT INTO product_variants
+           (product_id, sku, price_cents, sale_price_cents, stock, weight_oz,
+            length_in, width_in, height_in, attributes, image_url, is_active, position)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING *`,
+        [req.params.id, d.sku ?? null, d.price_cents ?? null, d.sale_price_cents ?? null,
+         d.stock, d.weight_oz ?? null, d.length_in ?? null, d.width_in ?? null, d.height_in ?? null,
+         JSON.stringify(d.attributes), d.image_url ?? null, d.is_active, d.position]
+      );
+      res.status(201).json({ data: rows[0] });
+      logAuditEvent({ req, action: 'variant.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { product_id: req.params.id, variant_id: rows[0].id } });
+    });
+  } catch (err) {
+    console.error('[variants] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/:id/variants/:variantId
+productsRouter.patch('/:id/variants/:variantId', requireRole('operator'), async (req, res) => {
+  const parse = variantSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+  const updates = parse.data;
+  const fields = Object.keys(updates) as Array<keyof typeof updates>;
+  if (fields.length === 0) { res.status(400).json({ error: 'No fields to update' }); return; }
+  const setClauses = fields.map((f, i) => `${f} = $${i + 3}`).join(', ');
+  const values = fields.map(f => f === 'attributes' ? JSON.stringify(updates[f]) : updates[f]);
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `UPDATE product_variants SET ${setClauses}, updated_at = now()
+         WHERE id = $1 AND product_id = $2 RETURNING *`,
+        [req.params.variantId, req.params.id, ...values]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Variant not found' }); return; }
+      res.json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[variants] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/:id/variants/:variantId
+productsRouter.delete('/:id/variants/:variantId', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query(
+        'DELETE FROM product_variants WHERE id = $1 AND product_id = $2',
+        [req.params.variantId, req.params.id]
+      );
+      if (!rowCount) { res.status(404).json({ error: 'Variant not found' }); return; }
+
+      // If no variants remain, revert to simple product
+      const { rows: remaining } = await db.query(
+        'SELECT COUNT(*)::int AS cnt FROM product_variants WHERE product_id = $1',
+        [req.params.id]
+      );
+      if (remaining[0]?.cnt === 0) {
+        await db.query("UPDATE products SET product_type = 'simple', updated_at = now() WHERE id = $1", [req.params.id]);
+      }
+
+      res.status(204).send();
+    });
+  } catch (err) {
+    console.error('[variants] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/products/:id — MUST be after named sub-routes (discount-rules, customer-groups, attributes, variants)
 productsRouter.get('/:id', async (req, res) => {
   try {
     await withTenantSchema(req.tenantSlug!, async (db) => {
@@ -744,7 +1416,24 @@ productsRouter.get('/:id', async (req, res) => {
         [req.params.id]
       );
       if (!rows[0]) { res.status(404).json({ error: 'Product not found' }); return; }
-      res.json({ data: rows[0] });
+
+      // Include variants if it's a variable product
+      let variants: unknown[] = [];
+      if (rows[0].product_type === 'variable') {
+        const vResult = await db.query(
+          'SELECT * FROM product_variants WHERE product_id = $1 ORDER BY position ASC, created_at ASC',
+          [req.params.id]
+        );
+        variants = vResult.rows;
+      }
+
+      // Include images
+      const { rows: images } = await db.query(
+        'SELECT * FROM product_images WHERE product_id = $1 ORDER BY position ASC, created_at ASC',
+        [req.params.id]
+      );
+
+      res.json({ data: { ...rows[0], variants, images } });
     });
   } catch (err) {
     console.error('[products] Get error:', err);
@@ -771,6 +1460,435 @@ productsRouter.delete('/:id', requireRole('tenant_admin'), async (req, res) => {
     });
   } catch (err) {
     console.error('[products] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Product Reviews (Admin) ──────────────────────────────────────────────────
+
+// GET /api/products/reviews — list all reviews (admin), optionally filter by status
+productsRouter.get('/reviews', requireRole('operator'), async (req, res) => {
+  const { status, page = '1', limit = '20' } = req.query;
+  const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const params: unknown[] = [parseInt(limit as string), offset];
+      const where = status ? `WHERE r.status = $${params.push(status)}` : '';
+
+      const { rows } = await db.query(
+        `SELECT r.*, p.name AS product_name, COUNT(*) OVER() AS total_count
+         FROM product_reviews r
+         JOIN products p ON p.id = r.product_id
+         ${where}
+         ORDER BY r.created_at DESC
+         LIMIT $1 OFFSET $2`,
+        params
+      );
+
+      const total = rows[0]?.total_count ?? 0;
+      res.json({
+        data: rows,
+        meta: { page: parseInt(page as string), limit: parseInt(limit as string), total: parseInt(total) },
+      });
+    });
+  } catch (err) {
+    console.error('[reviews] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/reviews/:reviewId — moderate review (approve/reject)
+productsRouter.patch('/reviews/:reviewId', requireRole('operator'), async (req, res) => {
+  const { status } = req.body as { status?: string };
+  if (!status || !['approved', 'rejected'].includes(status)) {
+    res.status(400).json({ error: 'status must be "approved" or "rejected"' });
+    return;
+  }
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows: [review] } = await db.query(
+        `UPDATE product_reviews SET status = $2, updated_at = now() WHERE id = $1 RETURNING *`,
+        [req.params.reviewId, status]
+      );
+      if (!review) { res.status(404).json({ error: 'Review not found' }); return; }
+
+      // Recalculate aggregate on the product
+      await db.query(
+        `UPDATE products SET
+           review_count = (SELECT COUNT(*) FROM product_reviews WHERE product_id = $1 AND status = 'approved'),
+           avg_rating   = COALESCE((SELECT AVG(rating)::numeric(3,2) FROM product_reviews WHERE product_id = $1 AND status = 'approved'), 0)
+         WHERE id = $1`,
+        [review.product_id]
+      );
+
+      res.json({ data: review });
+    });
+  } catch (err) {
+    console.error('[reviews] Moderate error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/reviews/:reviewId — delete review
+productsRouter.delete('/reviews/:reviewId', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows: [review] } = await db.query(
+        'DELETE FROM product_reviews WHERE id = $1 RETURNING product_id',
+        [req.params.reviewId]
+      );
+      if (!review) { res.status(404).json({ error: 'Review not found' }); return; }
+
+      // Recalculate aggregate
+      await db.query(
+        `UPDATE products SET
+           review_count = (SELECT COUNT(*) FROM product_reviews WHERE product_id = $1 AND status = 'approved'),
+           avg_rating   = COALESCE((SELECT AVG(rating)::numeric(3,2) FROM product_reviews WHERE product_id = $1 AND status = 'approved'), 0)
+         WHERE id = $1`,
+        [review.product_id]
+      );
+
+      res.json({ success: true });
+    });
+  } catch (err) {
+    console.error('[reviews] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Stock Movements ──────────────────────────────────────────────────────────
+
+const stockAdjustmentSchema = z.object({
+  qty_change:   z.number().int(),
+  reason:       z.enum(['sale', 'return', 'adjustment', 'transfer', 'restock']),
+  reference_id: z.string().optional(),
+  notes:        z.string().max(500).optional(),
+  variant_id:   z.string().uuid().optional(),
+});
+
+// POST /api/products/:id/stock — adjust stock and record movement
+productsRouter.post('/:id/stock', requireRole('operator'), async (req, res) => {
+  const parse = stockAdjustmentSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() });
+    return;
+  }
+
+  const { qty_change, reason, reference_id, notes, variant_id } = parse.data;
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      // Update product stock
+      if (variant_id) {
+        const { rows: [v] } = await db.query(
+          'UPDATE product_variants SET stock = stock + $2 WHERE id = $1 AND product_id = $3 RETURNING stock',
+          [variant_id, qty_change, req.params.id]
+        );
+        if (!v) { res.status(404).json({ error: 'Variant not found' }); return; }
+      } else {
+        const { rows: [p] } = await db.query(
+          'UPDATE products SET stock_qty = stock_qty + $2, updated_at = now() WHERE id = $1 RETURNING stock_qty',
+          [req.params.id, qty_change]
+        );
+        if (!p) { res.status(404).json({ error: 'Product not found' }); return; }
+      }
+
+      // Record movement
+      const { rows: [movement] } = await db.query(
+        `INSERT INTO stock_movements (product_id, variant_id, qty_change, reason, reference_id, notes, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [req.params.id, variant_id ?? null, qty_change, reason, reference_id ?? null, notes ?? null, req.user!.userId]
+      );
+
+      res.status(201).json({ data: movement });
+
+      logAuditEvent({
+        req, action: 'stock.adjusted', tenantId: req.user!.tenantId, userId: req.user!.userId,
+        metadata: { product_id: req.params.id, qty_change, reason },
+      });
+    });
+  } catch (err) {
+    console.error('[products] Stock adjustment error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/products/:id/stock-history — get stock movement history
+productsRouter.get('/:id/stock-history', requireRole('operator'), async (req, res) => {
+  const { page = '1', limit = '50' } = req.query;
+  const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `SELECT sm.*, COUNT(*) OVER() AS total_count
+         FROM stock_movements sm
+         WHERE sm.product_id = $1
+         ORDER BY sm.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.id, parseInt(limit as string), offset]
+      );
+
+      const total = rows[0]?.total_count ?? 0;
+      res.json({
+        data: rows,
+        meta: { page: parseInt(page as string), limit: parseInt(limit as string), total: parseInt(total) },
+      });
+    });
+  } catch (err) {
+    console.error('[products] Stock history error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Abandoned Carts (Admin) ──────────────────────────────────────────────────
+
+// GET /api/products/abandoned-carts — list abandoned carts
+productsRouter.get('/abandoned-carts', requireRole('operator'), async (req, res) => {
+  const { page = '1', limit = '20' } = req.query;
+  const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        `SELECT *, COUNT(*) OVER() AS total_count
+         FROM abandoned_carts
+         WHERE recovered_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT $1 OFFSET $2`,
+        [parseInt(limit as string), offset]
+      );
+
+      const total = rows[0]?.total_count ?? 0;
+      res.json({
+        data: rows,
+        meta: { page: parseInt(page as string), limit: parseInt(limit as string), total: parseInt(total) },
+      });
+    });
+  } catch (err) {
+    console.error('[products] Abandoned carts error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Pages / CMS (Admin) ─────────────────────────────────────────────────────
+
+const pageSchema = z.object({
+  slug:            z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+  title:           z.string().min(1).max(255),
+  body:            z.string().default(''),
+  seo_title:       z.string().max(255).optional(),
+  seo_description: z.string().max(500).optional(),
+  is_published:    z.boolean().default(false),
+  position:        z.number().int().min(0).default(0),
+});
+
+// GET /api/products/pages — list all pages
+productsRouter.get('/pages', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query('SELECT * FROM pages ORDER BY position ASC, created_at DESC');
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[pages] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/pages — create page
+productsRouter.post('/pages', requireRole('operator'), async (req, res) => {
+  const parse = pageSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const d = parse.data;
+      const { rows: [page] } = await db.query(
+        `INSERT INTO pages (slug, title, body, seo_title, seo_description, is_published, position)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [d.slug, d.title, d.body, d.seo_title ?? null, d.seo_description ?? null, d.is_published, d.position]
+      );
+      res.status(201).json({ data: page });
+    });
+  } catch (err) {
+    console.error('[pages] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/pages/:id — update page
+productsRouter.patch('/pages/:id', requireRole('operator'), async (req, res) => {
+  const parse = pageSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed' }); return; }
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const sets: string[] = ['updated_at = now()'];
+      const params: unknown[] = [req.params.id];
+      for (const [key, val] of Object.entries(parse.data)) {
+        params.push(val ?? null);
+        sets.push(`${key} = $${params.length}`);
+      }
+      const { rows: [page] } = await db.query(
+        `UPDATE pages SET ${sets.join(', ')} WHERE id = $1 RETURNING *`, params
+      );
+      if (!page) { res.status(404).json({ error: 'Page not found' }); return; }
+      res.json({ data: page });
+    });
+  } catch (err) {
+    console.error('[pages] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/pages/:id — delete page
+productsRouter.delete('/pages/:id', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM pages WHERE id = $1', [req.params.id]);
+      if (!rowCount) { res.status(404).json({ error: 'Page not found' }); return; }
+      res.json({ success: true });
+    });
+  } catch (err) {
+    console.error('[pages] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Navigation Menus (Admin) ─────────────────────────────────────────────────
+
+// GET /api/products/nav-menus — list all nav menus
+productsRouter.get('/nav-menus', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query('SELECT * FROM nav_menus ORDER BY location');
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[nav-menus] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/products/nav-menus/:location — update menu items for location
+productsRouter.put('/nav-menus/:location', requireRole('operator'), async (req, res) => {
+  const location = req.params.location;
+  if (!['header', 'footer'].includes(location)) {
+    res.status(400).json({ error: 'Location must be "header" or "footer"' }); return;
+  }
+  const { items } = req.body as { items?: unknown[] };
+  if (!Array.isArray(items)) { res.status(400).json({ error: 'items array required' }); return; }
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows: [menu] } = await db.query(
+        `UPDATE nav_menus SET items = $2, updated_at = now() WHERE location = $1 RETURNING *`,
+        [location, JSON.stringify(items)]
+      );
+      if (!menu) { res.status(404).json({ error: 'Menu not found' }); return; }
+      res.json({ data: menu });
+    });
+  } catch (err) {
+    console.error('[nav-menus] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Blog Posts (Admin) ───────────────────────────────────────────────────────
+
+const blogPostSchema = z.object({
+  slug:           z.string().min(1).max(200).regex(/^[a-z0-9-]+$/),
+  title:          z.string().min(1).max(255),
+  body:           z.string().default(''),
+  excerpt:        z.string().max(500).optional(),
+  featured_image: z.string().url().optional(),
+  status:         z.enum(['draft', 'published']).default('draft'),
+  tags:           z.array(z.string()).default([]),
+});
+
+// GET /api/products/blog-posts
+productsRouter.get('/blog-posts', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query('SELECT * FROM blog_posts ORDER BY created_at DESC');
+      res.json({ data: rows });
+    });
+  } catch (err) {
+    console.error('[blog] List error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/products/blog-posts
+productsRouter.post('/blog-posts', requireRole('operator'), async (req, res) => {
+  const parse = blogPostSchema.safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed', details: parse.error.flatten() }); return; }
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const d = parse.data;
+      const publishedAt = d.status === 'published' ? new Date().toISOString() : null;
+      const { rows: [post] } = await db.query(
+        `INSERT INTO blog_posts (slug, title, body, excerpt, featured_image, status, published_at, tags, author_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [d.slug, d.title, d.body, d.excerpt ?? null, d.featured_image ?? null,
+         d.status, publishedAt, JSON.stringify(d.tags), req.user!.userId]
+      );
+      res.status(201).json({ data: post });
+    });
+  } catch (err) {
+    console.error('[blog] Create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/products/blog-posts/:id
+productsRouter.patch('/blog-posts/:id', requireRole('operator'), async (req, res) => {
+  const parse = blogPostSchema.partial().safeParse(req.body);
+  if (!parse.success) { res.status(400).json({ error: 'Validation failed' }); return; }
+
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const sets: string[] = ['updated_at = now()'];
+      const params: unknown[] = [req.params.id];
+      for (const [key, val] of Object.entries(parse.data)) {
+        if (key === 'tags') {
+          params.push(JSON.stringify(val));
+        } else {
+          params.push(val ?? null);
+        }
+        sets.push(`${key} = $${params.length}`);
+      }
+      // Auto-set published_at when publishing
+      if (parse.data.status === 'published') {
+        params.push(new Date().toISOString());
+        sets.push(`published_at = COALESCE(published_at, $${params.length}::timestamptz)`);
+      }
+      const { rows: [post] } = await db.query(
+        `UPDATE blog_posts SET ${sets.join(', ')} WHERE id = $1 RETURNING *`, params
+      );
+      if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
+      res.json({ data: post });
+    });
+  } catch (err) {
+    console.error('[blog] Update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/products/blog-posts/:id
+productsRouter.delete('/blog-posts/:id', requireRole('operator'), async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rowCount } = await db.query('DELETE FROM blog_posts WHERE id = $1', [req.params.id]);
+      if (!rowCount) { res.status(404).json({ error: 'Post not found' }); return; }
+      res.json({ success: true });
+    });
+  } catch (err) {
+    console.error('[blog] Delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

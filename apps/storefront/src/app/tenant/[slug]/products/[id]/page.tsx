@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound }  from 'next/navigation';
-import { getProduct, getRelatedProducts } from '@/lib/tenant-api';
+import { getProduct, getRelatedProducts, getProductReviews } from '@/lib/tenant-api';
 import { ProductDetailView } from './ProductDetailView';
 
 interface PageProps {
@@ -20,14 +20,19 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const product = await getProduct(params.slug, params.id);
   if (!product) notFound();
 
-  // Related products (same category)
-  const related = await getRelatedProducts(params.slug, product.id, product.category);
+  // Related products + reviews in parallel
+  const [related, reviewsResult] = await Promise.all([
+    getRelatedProducts(params.slug, product.id, product.category),
+    getProductReviews(params.slug, product.id),
+  ]);
 
   return (
     <ProductDetailView
       slug={params.slug}
       ssrProduct={product}
       related={related}
+      initialReviews={reviewsResult.data}
+      reviewTotal={reviewsResult.meta.total}
     />
   );
 }
