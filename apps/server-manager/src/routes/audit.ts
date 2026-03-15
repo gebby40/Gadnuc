@@ -8,10 +8,12 @@ auditRouter.use(requireAuth, requireRole('super_admin'));
 // GET /api/audit?tenant_id=&event_type=&limit=&page=
 auditRouter.get('/', async (req, res) => {
   const { tenant_id, event_type, page = '1', limit = '50' } = req.query;
-  const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+  const pageNum  = Math.max(1, parseInt(page as string, 10) || 1);
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit as string, 10) || 50));
+  const offset   = (pageNum - 1) * limitNum;
   const pool = getPool();
 
-  const params: unknown[] = [parseInt(limit as string), offset];
+  const params: unknown[] = [limitNum, offset];
   const conds: string[] = ['1=1'];
   if (tenant_id) { params.push(tenant_id); conds.push(`a.tenant_id = $${params.length}`); }
   if (event_type) { params.push(event_type); conds.push(`a.event_type = $${params.length}`); }
@@ -29,7 +31,7 @@ auditRouter.get('/', async (req, res) => {
     const total = rows[0]?.total_count ?? 0;
     res.json({
       data: rows,
-      meta: { page: parseInt(page as string), limit: parseInt(limit as string), total: parseInt(total) },
+      meta: { page: pageNum, limit: limitNum, total: parseInt(total) },
     });
   } catch (err) {
     console.error('[audit] List error:', err);

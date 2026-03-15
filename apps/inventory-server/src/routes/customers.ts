@@ -23,6 +23,7 @@ import { requireAuth, requireRole, hashPassword, verifyPassword, signAccessToken
 import { withTenantSchema } from '@gadnuc/db';
 import { emitWebhookEvent } from '../services/webhooks.js';
 import { logAuditEvent } from '../middleware/audit.js';
+import { authRateLimit } from '../middleware/tenant-rate-limit.js';
 import {
   generateRefreshToken,
   storeRefreshToken,
@@ -108,7 +109,7 @@ const adminUpdateSchema = z.object({
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /api/customers/register
-customersRouter.post('/register', async (req: Request, res: Response) => {
+customersRouter.post('/register', authRateLimit(), async (req: Request, res: Response) => {
   const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
@@ -161,7 +162,7 @@ customersRouter.post('/register', async (req: Request, res: Response) => {
 });
 
 // POST /api/customers/login
-customersRouter.post('/login', async (req: Request, res: Response) => {
+customersRouter.post('/login', authRateLimit(), async (req: Request, res: Response) => {
   const tenant = req.tenant;
   if (!tenant) { res.status(400).json({ error: 'Tenant not resolved' }); return; }
 
@@ -432,9 +433,16 @@ customersRouter.delete('/:id', requireAuth, requireRole('tenant_admin'), async (
       );
       if (!target) { res.status(404).json({ error: 'Customer not found' }); return; }
 
-      // Nullify customer_id on orders (keep order history)
-      await db.query('UPDATE orders SET customer_id = NULL WHERE customer_id = $1', [req.params.id]);
-      await db.query('DELETE FROM customers WHERE id = $1', [req.params.id]);
+      // Wrap in transaction so nullifying orders + deleting customer is atomic
+      await db.query('BEGIN');
+      try {
+        await db.query('UPDATE orders SET customer_id = NULL WHERE customer_id = $1', [req.params.id]);
+        await db.query('DELETE FROM customers WHERE id = $1', [req.params.id]);
+        await db.query('COMMIT');
+      } catch (txErr) {
+        await db.query('ROLLBACK');
+        throw txErr;
+      }
       res.status(204).send();
 
       logAuditEvent({ req, action: 'customer.deleted', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { customer_id: req.params.id, email: (target as Record<string, unknown>).email } });

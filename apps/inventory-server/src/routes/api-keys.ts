@@ -59,7 +59,9 @@ apiKeysRouter.post('/', tenantRateLimit({ max: 20 }), async (req, res) => {
     const { rows: [row] } = await pool.query(
       `INSERT INTO public.api_keys
          (tenant_id, key_hash, key_prefix, name, role, scopes, expires_at, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb,
+               CASE WHEN $7::int IS NOT NULL THEN now() + ($7::int * interval '1 day') ELSE NULL END,
+               $8)
        RETURNING id, name, role, scopes, key_prefix, is_active, expires_at, created_at`,
       [
         tenantId,
@@ -68,7 +70,7 @@ apiKeysRouter.post('/', tenantRateLimit({ max: 20 }), async (req, res) => {
         name,
         role,
         JSON.stringify(scopes),
-        expires_in_days ? `now() + interval '${expires_in_days} days'` : null,
+        expires_in_days ?? null,
         req.user!.userId,
       ],
     );

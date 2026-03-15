@@ -40,15 +40,20 @@ setInterval(cleanupBuckets, 5 * 60_000).unref();
 export function tenantRateLimit(opts?: {
   windowMs?: number;
   max?: number;
+  includeIp?: boolean;
 }) {
-  const windowMs = opts?.windowMs ?? WINDOW_MS;
-  const max      = opts?.max ?? MAX_PER_TENANT;
+  const windowMs   = opts?.windowMs ?? WINDOW_MS;
+  const max        = opts?.max ?? MAX_PER_TENANT;
+  const includeIp  = opts?.includeIp ?? false;
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const tenantSlug = req.tenantSlug;
     if (!tenantSlug) return next(); // no tenant = no tenant-level limiting
 
-    const key = `rl:tenant:${tenantSlug}`;
+    const ip = includeIp
+      ? (req.headers['x-forwarded-for'] as string ?? req.socket.remoteAddress ?? 'unknown')
+      : '';
+    const key = includeIp ? `rl:tenant:${tenantSlug}:${ip}` : `rl:tenant:${tenantSlug}`;
     const now = Date.now();
 
     // Try Redis first
@@ -108,7 +113,7 @@ export function tenantRateLimit(opts?: {
  * 10 attempts per minute per tenant+IP combination.
  */
 export function authRateLimit() {
-  return tenantRateLimit({ windowMs: 60_000, max: 10 });
+  return tenantRateLimit({ windowMs: 60_000, max: 10, includeIp: true });
 }
 
 /**
@@ -116,5 +121,5 @@ export function authRateLimit() {
  * 5 TOTP verification attempts per minute per tenant+IP.
  */
 export function mfaRateLimit() {
-  return tenantRateLimit({ windowMs: 60_000, max: 5 });
+  return tenantRateLimit({ windowMs: 60_000, max: 5, includeIp: true });
 }

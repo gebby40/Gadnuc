@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link  from 'next/link';
+import DOMPurify from 'isomorphic-dompurify';
 import type { Product } from '@/lib/tenant-api';
 import { AddToCartButton } from '@/components/AddToCartButton';
 import { ProductGrid }     from '@/components/ProductGrid';
@@ -193,7 +194,7 @@ export function ProductDetailView({ slug, ssrProduct, related }: Props) {
                     <div
                       className="leading-relaxed text-sm prose prose-sm max-w-none"
                       style={{ color: 'var(--color-text-muted)' }}
-                      dangerouslySetInnerHTML={{ __html: product.description }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
                     />
                   ) : (
                     <p

@@ -175,12 +175,21 @@ export async function purgeAllTenantData(
     const { slug } = rows[0];
     assertValidSlug(slug);
 
-    // 1. Drop schema
-    await client.query(`DROP SCHEMA IF EXISTS tenant_${slug} CASCADE`);
+    // Wrap in transaction so schema drop + tenant delete are atomic
+    await client.query('BEGIN');
+    try {
+      // 1. Drop schema
+      await client.query(`DROP SCHEMA IF EXISTS tenant_${slug} CASCADE`);
 
-    // 2+3+4: Cascade DELETE on public.tenants removes refresh_tokens and feature_flags.
-    //        Audit log uses ON DELETE SET NULL so history is retained but de-linked.
-    await client.query('DELETE FROM public.tenants WHERE id = $1', [tenantId]);
+      // 2+3+4: Cascade DELETE on public.tenants removes refresh_tokens and feature_flags.
+      //        Audit log uses ON DELETE SET NULL so history is retained but de-linked.
+      await client.query('DELETE FROM public.tenants WHERE id = $1', [tenantId]);
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    }
 
     console.log(`[DB] GDPR purge complete for tenant: ${slug}`);
     return { slug };

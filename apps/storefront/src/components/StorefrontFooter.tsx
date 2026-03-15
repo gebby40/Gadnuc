@@ -1,11 +1,13 @@
 interface Props {
+  slug:         string;
   storeName:    string;
   contactEmail: string | null;
   contactPhone: string | null;
   socialLinks:  Record<string, string>;
 }
 
-export function StorefrontFooter({ storeName, contactEmail, contactPhone, socialLinks }: Props) {
+export function StorefrontFooter({ slug, storeName, contactEmail, contactPhone, socialLinks }: Props) {
+  const base = `/tenant/${slug}`;
   const hasSocial = Object.keys(socialLinks).length > 0;
 
   return (
@@ -51,7 +53,7 @@ export function StorefrontFooter({ storeName, contactEmail, contactPhone, social
           <ul className="list-none p-0 m-0 space-y-2 text-sm">
             <li>
               <a
-                href="products"
+                href={`${base}/products`}
                 style={{ color: 'var(--color-footer-text)', textDecoration: 'none', opacity: 0.7 }}
               >
                 All Products
@@ -59,7 +61,7 @@ export function StorefrontFooter({ storeName, contactEmail, contactPhone, social
             </li>
             <li>
               <a
-                href="cart"
+                href={`${base}/cart`}
                 style={{ color: 'var(--color-footer-text)', textDecoration: 'none', opacity: 0.7 }}
               >
                 Cart

@@ -295,9 +295,10 @@ export function WorkspaceChat({ slug }: Props) {
   const [presence,      setPresence]      = useState<Record<string, 'online' | 'offline'>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const bottomRef  = useRef<HTMLDivElement>(null);
-  const inputRef   = useRef<HTMLInputElement>(null);
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bottomRef      = useRef<HTMLDivElement>(null);
+  const inputRef       = useRef<HTMLInputElement>(null);
+  const typingTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRoomRef  = useRef<Room | null>(null);
 
   // ── Sync with AuthProvider (single sign-on) ────────────────────────────────
   useEffect(() => {
@@ -311,6 +312,9 @@ export function WorkspaceChat({ slug }: Props) {
       if (stored) setToken(stored);
     }
   }, [authToken, authUser, authLoading]);
+
+  // Keep activeRoomRef in sync so socket handlers always see current room
+  useEffect(() => { activeRoomRef.current = activeRoom; }, [activeRoom]);
 
   // ── Connect socket + load rooms once we have a token ───────────────────────
   useEffect(() => {
@@ -337,20 +341,21 @@ export function WorkspaceChat({ slug }: Props) {
         return [...prev, msg];
       });
       // Update unread count if not in active room
+      const currentRoom = activeRoomRef.current;
       setRooms((prev) => prev.map((r) =>
         r.id === msg.roomId
-          ? { ...r, unread_count: r.id === (activeRoom?.id) ? 0 : r.unread_count + 1 }
+          ? { ...r, unread_count: r.id === currentRoom?.id ? 0 : r.unread_count + 1 }
           : r,
       ));
     });
 
     socket.on('user_typing', ({ roomId, displayName }: { roomId: string; displayName: string }) => {
-      if (roomId !== activeRoom?.id) return;
+      if (roomId !== activeRoomRef.current?.id) return;
       setTypingNames((p) => p.includes(displayName) ? p : [...p, displayName]);
     });
 
     socket.on('user_stop_typing', ({ roomId, displayName }: { roomId: string; displayName: string }) => {
-      if (roomId !== activeRoom?.id) return;
+      if (roomId !== activeRoomRef.current?.id) return;
       setTypingNames((p) => p.filter((n) => n !== displayName));
     });
 

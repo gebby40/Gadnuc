@@ -7,6 +7,16 @@ import { StorefrontNav }     from '@/components/StorefrontNav';
 import { StorefrontFooter }  from '@/components/StorefrontFooter';
 import { StorefrontShell }   from '@/components/StorefrontShell';
 
+/** Strip dangerous CSS patterns that can execute JavaScript. */
+function sanitizeCss(css: string): string {
+  return css
+    .replace(/expression\s*\(/gi, '/* blocked */(')
+    .replace(/url\s*\(\s*['"]?\s*javascript:/gi, 'url(/* blocked */')
+    .replace(/-moz-binding\s*:/gi, '/* blocked */:')
+    .replace(/behavior\s*:/gi, '/* blocked */:')
+    .replace(/@import/gi, '/* blocked-import */');
+}
+
 interface Props {
   children: React.ReactNode;
   params:   { slug: string };
@@ -47,9 +57,9 @@ export default async function TenantLayout({ children, params }: Props) {
         vars={themeVars}
         className="min-h-screen flex flex-col"
       >
-        {/* Inject custom CSS if set by tenant */}
+        {/* Inject custom CSS if set by tenant (sanitized) */}
         {settings.custom_css && (
-          <style dangerouslySetInnerHTML={{ __html: settings.custom_css }} />
+          <style dangerouslySetInnerHTML={{ __html: sanitizeCss(settings.custom_css) }} />
         )}
 
         <StorefrontShell
@@ -63,6 +73,7 @@ export default async function TenantLayout({ children, params }: Props) {
           }
           footer={
             <StorefrontFooter
+              slug={params.slug}
               contactEmail={settings.contact_email ?? null}
               contactPhone={settings.contact_phone ?? null}
               socialLinks={settings.social_links ?? {}}

@@ -130,14 +130,14 @@ export function StorefrontNav({ slug, logoUrl, storeName }: Props) {
                     <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setAccountMenuOpen(false)} />
                     <div style={{
                       position: 'absolute', right: 0, top: '100%', marginTop: '0.5rem',
-                      background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0',
+                      background: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)',
                       boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: '160px', zIndex: 50,
                       padding: '0.25rem 0',
                     }}>
                       <Link
                         href={`${base}/account`}
                         onClick={() => setAccountMenuOpen(false)}
-                        style={{ display: 'block', padding: '0.5rem 1rem', fontSize: '0.85rem', color: '#374151', textDecoration: 'none' }}
+                        style={{ display: 'block', padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--color-text)', textDecoration: 'none' }}
                       >
                         My Account
                       </Link>

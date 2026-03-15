@@ -172,7 +172,8 @@ storefrontRouter.get('/products', optionalAuth, async (req: Request, res: Respon
 
       // Data query — sale_price_cents is only returned when the sale window is active
       // effective_price_cents: wholesale customers get wholesale price (if set), else retail
-      params.push(limitNum, offset);
+      params.push(isWholesale, limitNum, offset);
+      const wholesaleIdx = params.length - 2;
       const { rows } = await db.query(
         `SELECT id, sku, name, description, category, price_cents,
                 CASE
@@ -186,7 +187,7 @@ storefrontRouter.get('/products', optionalAuth, async (req: Request, res: Respon
                 height_in, shipping_class, tags, brand, is_featured,
                 sale_start, sale_end, wholesale_price_cents, wholesale_only,
                 CASE
-                  WHEN ${isWholesale} AND wholesale_price_cents IS NOT NULL
+                  WHEN $${wholesaleIdx}::boolean AND wholesale_price_cents IS NOT NULL
                   THEN wholesale_price_cents
                   ELSE price_cents
                 END AS effective_price_cents
@@ -237,13 +238,13 @@ storefrontRouter.get('/products/:id', optionalAuth, async (req: Request, res: Re
                 tags, brand, is_featured, sale_start, sale_end,
                 wholesale_price_cents, wholesale_only,
                 CASE
-                  WHEN ${isWholesale} AND wholesale_price_cents IS NOT NULL
+                  WHEN $2::boolean AND wholesale_price_cents IS NOT NULL
                   THEN wholesale_price_cents
                   ELSE price_cents
                 END AS effective_price_cents
          FROM products
          WHERE id = $1 AND is_active = true`,
-        [req.params.id],
+        [req.params.id, isWholesale],
       );
       return rows[0] ?? null;
     });
@@ -469,7 +470,7 @@ export async function handleStripeWebhook(req: Request, res: Response) {
       try {
       const productIds = items.map((i) => i.productId);
       const { rows: products } = await db.query(
-        'SELECT id, name, price_cents, wholesale_price_cents, sku FROM products WHERE id = ANY($1::uuid[])',
+        'SELECT id, name, price_cents, wholesale_price_cents, sku, stock_qty FROM products WHERE id = ANY($1::uuid[]) FOR UPDATE',
         [productIds],
       );
       const productMap = new Map(
@@ -528,11 +529,15 @@ export async function handleStripeWebhook(req: Request, res: Response) {
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [orderId, item.productId, p.sku, p.name, item.quantity, unitPrice],
         );
-        // Decrement stock
-        await db.query(
-          'UPDATE products SET stock_qty = GREATEST(0, stock_qty - $1), updated_at = now() WHERE id = $2',
+        // Decrement stock (rows are locked via FOR UPDATE above)
+        const { rows: [updated] } = await db.query(
+          'UPDATE products SET stock_qty = GREATEST(0, stock_qty - $1), updated_at = now() WHERE id = $2 RETURNING stock_qty',
           [item.quantity, item.productId],
         );
+        // Log if stock went to zero (may need restock)
+        if (updated && updated.stock_qty === 0) {
+          console.warn(`[webhook] Product ${item.productId} (${p.name}) is now out of stock`);
+        }
       }
 
       await db.query('COMMIT');

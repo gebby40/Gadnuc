@@ -34,6 +34,7 @@ featureFlagsRouter.get('/', async (req, res) => {
     );
     res.json({ data: rows });
   } catch (err) {
+    console.error('[feature-flags] List error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -66,6 +67,7 @@ featureFlagsRouter.put('/', async (req, res) => {
 
     res.json({ data: rows[0] });
   } catch (err) {
+    console.error('[feature-flags] Upsert error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -83,6 +85,7 @@ featureFlagsRouter.delete('/:id', async (req, res) => {
     invalidateFlagCache(flag.flag_name, flag.tenant_id ?? undefined);
     res.status(204).send();
   } catch (err) {
+    console.error('[feature-flags] Delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

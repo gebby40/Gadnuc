@@ -33,17 +33,19 @@ export function requireRole(minRole: Role) {
 }
 
 /**
- * requireAnyRole — allows any of the listed roles (exact match or higher).
+ * requireAnyRole — allows users who have one of the exact listed roles.
+ *
+ * Unlike requireRole (which uses role hierarchy), this checks for exact membership.
+ * Example: requireAnyRole('viewer', 'super_admin') allows ONLY those two roles.
  */
 export function requireAnyRole(...roles: Role[]) {
-  const minLevel = Math.min(...roles.map(roleLevel));
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = req.user;
     if (!user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
-    if (roleLevel(user.role) < minLevel) {
+    if (!roles.includes(user.role as Role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }

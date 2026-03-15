@@ -60,11 +60,13 @@ export default function ProductListPage() {
       setProducts(res.data);
       setTotal(res.pagination.total);
 
-      // Collect unique categories for filter
-      if (!categoryFilter && page === 0) {
-        const allRes = await tenantGet<ProductsResponse>(slug, token, '/api/products?limit=200');
-        const cats = [...new Set(allRes.data.map(p => p.category).filter(Boolean))] as string[];
-        setCategories(cats.sort());
+      // Collect unique categories from current page results (avoids fetching all products)
+      if (page === 0) {
+        const pageCats = res.data.map(p => p.category).filter(Boolean) as string[];
+        setCategories(prev => {
+          const merged = new Set([...prev, ...pageCats]);
+          return [...merged].sort();
+        });
       }
     } catch (err) {
       console.error('Failed to load products:', err);

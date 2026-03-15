@@ -72,6 +72,11 @@ if (!/^[a-z0-9_]+$/.test(destTable)) {
   process.exit(1);
 }
 
+if (srcTable && !/^[a-z0-9_]+(\.[a-z0-9_]+)?$/.test(srcTable)) {
+  console.error(`Error: invalid source-table name "${srcTable}"`);
+  process.exit(1);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function chunk<T>(arr: T[], size: number): T[][] {

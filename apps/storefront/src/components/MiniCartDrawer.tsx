@@ -196,7 +196,7 @@ export function MiniCartDrawer({ slug }: Props) {
               View Cart
             </Link>
             <Link
-              href={`${base}/cart`}
+              href={`${base}/checkout`}
               onClick={closeDrawer}
               className="block text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
               style={{

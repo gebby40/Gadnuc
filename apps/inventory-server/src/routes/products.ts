@@ -451,23 +451,6 @@ productsRouter.post('/import', requireRole('operator'), async (req, res) => {
   }
 });
 
-// GET /api/products/:id
-productsRouter.get('/:id', async (req, res) => {
-  try {
-    await withTenantSchema(req.tenantSlug!, async (db) => {
-      const { rows } = await db.query(
-        'SELECT * FROM products WHERE id = $1',
-        [req.params.id]
-      );
-      if (!rows[0]) { res.status(404).json({ error: 'Product not found' }); return; }
-      res.json({ data: rows[0] });
-    });
-  } catch (err) {
-    console.error('[products] Get error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // POST /api/products — create (requires operator+)
 productsRouter.post('/', requireRole('operator'), async (req, res) => {
   const parse = productSchema.safeParse(req.body);
@@ -484,8 +467,8 @@ productsRouter.post('/', requireRole('operator'), async (req, res) => {
            (sku, name, description, category, price_cents, sale_price_cents,
             stock_qty, low_stock_threshold, image_url, is_active, metadata,
             weight_oz, length_in, width_in, height_in, shipping_class,
-            tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+            tags, brand, is_featured, sale_start, sale_end, wholesale_price_cents, wholesale_only)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
          RETURNING *`,
         [d.sku, d.name, d.description ?? null, d.category ?? null,
          d.price_cents, d.sale_price_cents ?? null,
@@ -493,7 +476,8 @@ productsRouter.post('/', requireRole('operator'), async (req, res) => {
          d.image_url ?? null, d.is_active, JSON.stringify(d.metadata),
          d.weight_oz ?? null, d.length_in ?? null, d.width_in ?? null, d.height_in ?? null,
          d.shipping_class, d.tags, d.brand ?? null, d.is_featured,
-         d.sale_start ?? null, d.sale_end ?? null, d.wholesale_price_cents ?? null]
+         d.sale_start ?? null, d.sale_end ?? null, d.wholesale_price_cents ?? null,
+         d.wholesale_only ?? false]
       );
       res.status(201).json({ data: rows[0] });
 
@@ -747,6 +731,23 @@ productsRouter.delete('/customer-groups/:id', requireRole('tenant_admin'), async
     });
   } catch (err) {
     console.error('[customer-groups] Delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/products/:id — MUST be after named sub-routes (discount-rules, customer-groups)
+productsRouter.get('/:id', async (req, res) => {
+  try {
+    await withTenantSchema(req.tenantSlug!, async (db) => {
+      const { rows } = await db.query(
+        'SELECT * FROM products WHERE id = $1',
+        [req.params.id]
+      );
+      if (!rows[0]) { res.status(404).json({ error: 'Product not found' }); return; }
+      res.json({ data: rows[0] });
+    });
+  } catch (err) {
+    console.error('[products] Get error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

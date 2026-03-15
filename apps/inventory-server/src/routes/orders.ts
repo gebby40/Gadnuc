@@ -104,31 +104,38 @@ ordersRouter.post('/', requireRole('operator'), async (req, res) => {
 
   try {
     await withTenantSchema(req.tenantSlug!, async (db) => {
-      const { rows: [order] } = await db.query(
-        `INSERT INTO orders
-           (order_number, customer_name, customer_email, shipping_address, notes,
-            total_cents, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [orderNumber, orderData.customer_name, orderData.customer_email ?? null,
-         orderData.shipping_address ? JSON.stringify(orderData.shipping_address) : null,
-         orderData.notes ?? null, totalCents, req.user!.userId]
-      );
-
-      for (const item of items) {
-        await db.query(
-          `INSERT INTO order_items (order_id, product_id, sku, name, quantity, unit_price_cents)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [order.id, item.product_id ?? null, item.sku, item.name, item.quantity, item.unit_price_cents]
+      await db.query('BEGIN');
+      try {
+        const { rows: [order] } = await db.query(
+          `INSERT INTO orders
+             (order_number, customer_name, customer_email, shipping_address, notes,
+              total_cents, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [orderNumber, orderData.customer_name, orderData.customer_email ?? null,
+           orderData.shipping_address ? JSON.stringify(orderData.shipping_address) : null,
+           orderData.notes ?? null, totalCents, req.user!.userId]
         );
+
+        for (const item of items) {
+          await db.query(
+            `INSERT INTO order_items (order_id, product_id, sku, name, quantity, unit_price_cents)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [order.id, item.product_id ?? null, item.sku, item.name, item.quantity, item.unit_price_cents]
+          );
+        }
+
+        await db.query('COMMIT');
+        res.status(201).json({ data: { ...order, items } });
+
+        logAuditEvent({ req, action: 'order.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { order_id: order.id, order_number: orderNumber } });
+
+        emitWebhookEvent(req.user!.tenantId, 'order.created', {
+          order_id: order.id, order_number: orderNumber, total_cents: totalCents,
+        }).catch(() => {});
+      } catch (txErr) {
+        await db.query('ROLLBACK');
+        throw txErr;
       }
-
-      res.status(201).json({ data: { ...order, items } });
-
-      logAuditEvent({ req, action: 'order.created', tenantId: req.user!.tenantId, userId: req.user!.userId, metadata: { order_id: order.id, order_number: orderNumber } });
-
-      emitWebhookEvent(req.user!.tenantId, 'order.created', {
-        order_id: order.id, order_number: orderNumber, total_cents: totalCents,
-      }).catch(() => {});
     });
   } catch (err) {
     console.error('[orders] Create error:', err);
